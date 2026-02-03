@@ -1,0 +1,23 @@
+I'm building a credit/order flow analytics monorepo called "order_flow". The directory structure is already created.
+
+Create these foundation files in order:
+
+1. pyproject.toml (root) - uv workspace config for packages/
+2. .gitignore - Python defaults
+3. CLAUDE.md (root) - navigation map and global rules
+4. spec/SPEC.md - formulas for:
+   - §1.1 Credit PnL: Credit_PnL = -(ΔSpread) × (PVBP / MidPrice)
+   - §1.2 Retail Imbalance: I_t = (ΣBuy - ΣSell) / (ΣBuy + ΣSell) with QMP rule (α=0.1)
+   - §2.1 Z-score trigger: Z_t = (I_t - μ) / σ, trigger when |Z| > 7
+   - §2.2 Streak trigger: consecutive same-sign days, trigger when streak ≥ 3
+5. spec/fixtures/zscore_cases.json - test cases for z-score
+6. spec/fixtures/streak_cases.json - test cases for streak
+7. packages/signals/pyproject.toml
+8. packages/signals/CLAUDE.md
+9. packages/signals/src/__init__.py
+10. packages/signals/src/triggers.py - implement zscore_trigger() and streak_trigger()
+11. packages/signals/tests/conftest.py
+12. packages/signals/tests/test_triggers.py - fixture-driven tests
+13. tools/verify_spec_parity.py - checks spec matches code
+
+After creating all files, run: uv sync && uv run pytest packages/signals/tests/ -v
