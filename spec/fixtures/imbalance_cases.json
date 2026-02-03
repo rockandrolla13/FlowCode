@@ -1,0 +1,43 @@
+{
+  "description": "Golden test cases for retail order imbalance calculation",
+  "spec_section": "§1.2",
+  "formula": "I_t = (B_t - S_t) / (B_t + S_t)",
+  "cases": [
+    {
+      "name": "all_buys",
+      "input": {"buys": 100.0, "sells": 0.0},
+      "expected": 1.0
+    },
+    {
+      "name": "all_sells",
+      "input": {"buys": 0.0, "sells": 100.0},
+      "expected": -1.0
+    },
+    {
+      "name": "balanced",
+      "input": {"buys": 50.0, "sells": 50.0},
+      "expected": 0.0
+    },
+    {
+      "name": "more_buys",
+      "input": {"buys": 75.0, "sells": 25.0},
+      "expected": 0.5
+    },
+    {
+      "name": "more_sells",
+      "input": {"buys": 25.0, "sells": 75.0},
+      "expected": -0.5
+    },
+    {
+      "name": "zero_volume",
+      "input": {"buys": 0.0, "sells": 0.0},
+      "expected": null,
+      "note": "Returns NaN when no volume"
+    },
+    {
+      "name": "slight_buy_bias",
+      "input": {"buys": 60.0, "sells": 40.0},
+      "expected": 0.2
+    }
+  ]
+}

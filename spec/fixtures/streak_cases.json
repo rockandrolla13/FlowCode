@@ -1,0 +1,63 @@
+{
+  "description": "Golden test cases for streak trigger",
+  "spec_section": "§2.2",
+  "formula": "streak_t = consecutive days with same sign(X)",
+  "cases": [
+    {
+      "name": "positive_streak_3",
+      "input": {
+        "values": [0.1, 0.2, 0.15],
+        "min_streak": 3
+      },
+      "expected_streak": 3,
+      "expected_trigger": 1
+    },
+    {
+      "name": "negative_streak_3",
+      "input": {
+        "values": [-0.1, -0.2, -0.15],
+        "min_streak": 3
+      },
+      "expected_streak": 3,
+      "expected_trigger": -1
+    },
+    {
+      "name": "streak_broken",
+      "input": {
+        "values": [0.1, 0.2, -0.1, 0.15],
+        "min_streak": 3
+      },
+      "expected_streak": 1,
+      "expected_trigger": 0,
+      "note": "Streak resets after sign change"
+    },
+    {
+      "name": "insufficient_streak",
+      "input": {
+        "values": [0.1, 0.2],
+        "min_streak": 3
+      },
+      "expected_streak": 2,
+      "expected_trigger": 0
+    },
+    {
+      "name": "long_positive_streak",
+      "input": {
+        "values": [0.1, 0.2, 0.15, 0.12, 0.18],
+        "min_streak": 3
+      },
+      "expected_streak": 5,
+      "expected_trigger": 1
+    },
+    {
+      "name": "zero_breaks_streak",
+      "input": {
+        "values": [0.1, 0.2, 0.0, 0.15],
+        "min_streak": 3
+      },
+      "expected_streak": 1,
+      "expected_trigger": 0,
+      "note": "Zero counts as no direction"
+    }
+  ]
+}

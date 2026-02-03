@@ -1,0 +1,60 @@
+{
+  "description": "Golden test cases for z-score trigger",
+  "spec_section": "§2.1",
+  "formula": "Z_t = (X_t - μ) / σ",
+  "cases": [
+    {
+      "name": "above_threshold",
+      "input": {
+        "values": [0.1, 0.1, 0.1, 0.1, 0.1, 0.8],
+        "window": 5,
+        "threshold": 2.0
+      },
+      "expected_zscore": 3.13,
+      "expected_trigger": 1,
+      "tolerance": 0.01
+    },
+    {
+      "name": "below_negative_threshold",
+      "input": {
+        "values": [0.5, 0.5, 0.5, 0.5, 0.5, 0.0],
+        "window": 5,
+        "threshold": 2.0
+      },
+      "expected_zscore": -2.24,
+      "expected_trigger": -1,
+      "tolerance": 0.01
+    },
+    {
+      "name": "within_threshold",
+      "input": {
+        "values": [0.1, 0.2, 0.15, 0.12, 0.18, 0.16],
+        "window": 5,
+        "threshold": 2.0
+      },
+      "expected_trigger": 0,
+      "note": "Value within normal range, no trigger"
+    },
+    {
+      "name": "insufficient_history",
+      "input": {
+        "values": [0.1, 0.2],
+        "window": 5,
+        "threshold": 2.0
+      },
+      "expected_zscore": null,
+      "expected_trigger": 0,
+      "note": "Not enough data points"
+    },
+    {
+      "name": "extreme_positive",
+      "input": {
+        "values": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        "window": 5,
+        "threshold": 7.0
+      },
+      "expected_trigger": 1,
+      "note": "Extreme deviation, exceeds threshold"
+    }
+  ]
+}
