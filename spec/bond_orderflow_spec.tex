@@ -1,0 +1,64 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{geometry}
+\usepackage{bm}
+\usepackage{booktabs}
+
+\geometry{a4paper, margin=0.8in}
+
+\title{Technical Specification: Bond OrderFlow \& Retail Alpha Integration}
+\author{Quantitative Strategy Group}
+\date{February 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Metric Definitions (Standard OrderFlow)}
+The base performance metrics for the EMEA desk are defined as follows:
+
+\begin{itemize}
+    \item \textbf{Credit PnL:} Measures performance relative to spread changes.
+    \begin{equation}
+    Credit\_PnL = -(\Delta Spread_{1w}) \times \frac{PVBP}{MidPrice}
+    \end{equation}
+    \item \textbf{Range Position:} Normalizes the current spread relative to its historical 1-month window.
+    \begin{equation}
+    RangePos = \frac{Spread_{curr} - Spread_{avg}}{Spread_{max} - Spread_{min}}
+    \end{equation}
+    \item \textbf{Tilt/Streak:} Binary counters of continuous buy (B) or sell (S) days.
+\end{itemize}
+
+\section{Retail Alpha Identification (BJZZ \& QMP)}
+To isolate the alpha signal, we identify retail trades using the subpenny logic[cite: 41, 73, 1185, 1193]:
+\begin{enumerate}
+    \item \textbf{Identification Rule:} A trade $k$ is retail if $Notional < \$200,000$ and $mod(Price_k \times 100, 1) > 0$[cite: 73, 76, 1193].
+    \item \textbf{Directional Signing (Lee-Ready QMP):}
+    \begin{equation}
+    S_k =
+    \begin{cases}
+    1 \text{ (Buy)} & \text{if } Price_k > Midpoint_k \\
+    -1 \text{ (Sell)} & \text{if } Price_k < Midpoint_k
+    \end{cases}
+    \end{equation}
+    Exclude trades where $Price_k$ is within $40\%-60\%$ of the NBBO spread[cite: 1200].
+\end{enumerate}
+
+\section{Predictive Strategy Logic}
+\subsection{Momentum (Single Name Bonds)}
+For corporate bonds, compute the 5-day imbalance $I_t$[cite: 443, 1244]:
+\begin{equation}
+I_t = \frac{\sum \$Buy - \sum \$Sell}{\sum \$Buy + \sum \$Sell}
+\end{equation}
+Positive $I_t$ combined with a \textbf{Streak} $\ge 3$ signals continued spread tightening[cite: 8, 46].
+
+\subsection{Mean Reversion (Aggregates/ETFs)}
+For liquid aggregates, compute the 1-Year Z-score of imbalance $Z_t$[cite: 630, 633]:
+\begin{equation}
+Z_t = \frac{I_t - \mu(I_{1Y})}{\sigma(I_{1Y})}
+\end{equation}
+If $|Z_t| > 7$, forecast a reversal event with an expected weekly return impact of $\approx -3.1\%$[cite: 13, 655].
+
+\end{document}

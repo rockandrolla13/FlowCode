@@ -6,9 +6,15 @@ using the Quote Midpoint (QMP) classification rule.
 Formula (Spec §1.2):
     I_t = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 
-QMP Classification:
-    Buy if price > mid + threshold * spread
-    Sell otherwise
+QMP Classification (Lee-Ready):
+    Buy if price > midpoint
+    Sell if price < midpoint
+    Exclude trades in 40-60% NBBO exclusion zone
+
+Retail Identification (BJZZ subpenny logic):
+    A trade is retail if:
+    1. Notional < $200,000
+    2. mod(Price × 100, 1) > 0 (subpenny pricing)
 """
 
 import logging
@@ -18,6 +24,126 @@ import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+# Constants for retail identification
+RETAIL_NOTIONAL_THRESHOLD = 200_000  # $200,000
+NBBO_EXCLUSION_LOW = 0.40  # 40% of spread
+NBBO_EXCLUSION_HIGH = 0.60  # 60% of spread
+
+
+def is_subpenny(price: float) -> bool:
+    """
+    Check if price has subpenny pricing.
+
+    Subpenny trades have fractional cents, indicating retail execution.
+
+    Parameters
+    ----------
+    price : float
+        Trade execution price.
+
+    Returns
+    -------
+    bool
+        True if price has subpenny component.
+
+    Examples
+    --------
+    >>> is_subpenny(100.501)  # Has subpenny
+    True
+    >>> is_subpenny(100.50)   # No subpenny
+    False
+    >>> is_subpenny(100.00)   # Round price
+    False
+    """
+    # mod(price * 100, 1) > 0 means there's a fractional cent
+    return (price * 100) % 1 > 0
+
+
+def is_retail_trade(
+    price: float,
+    notional: float,
+    notional_threshold: float = RETAIL_NOTIONAL_THRESHOLD,
+) -> bool:
+    """
+    Identify if a trade is likely retail using BJZZ subpenny logic.
+
+    A trade is classified as retail if:
+    1. Notional value < $200,000
+    2. Price has subpenny component (mod(Price × 100, 1) > 0)
+
+    Parameters
+    ----------
+    price : float
+        Trade execution price.
+    notional : float
+        Trade notional value in dollars.
+    notional_threshold : float, default 200_000
+        Maximum notional for retail classification.
+
+    Returns
+    -------
+    bool
+        True if trade is likely retail.
+
+    Examples
+    --------
+    >>> is_retail_trade(price=100.501, notional=50_000)
+    True
+    >>> is_retail_trade(price=100.50, notional=50_000)  # No subpenny
+    False
+    >>> is_retail_trade(price=100.501, notional=500_000)  # Too large
+    False
+
+    Notes
+    -----
+    Based on BJZZ methodology [cite: 41, 73, 1185, 1193].
+    Subpenny pricing indicates price improvement from wholesalers,
+    which is characteristic of retail order flow.
+    """
+    return notional < notional_threshold and is_subpenny(price)
+
+
+def classify_retail_trades(
+    trades: pd.DataFrame,
+    price_col: str = "price",
+    notional_col: str = "notional",
+    notional_threshold: float = RETAIL_NOTIONAL_THRESHOLD,
+) -> pd.Series:
+    """
+    Classify all trades as retail or institutional.
+
+    Parameters
+    ----------
+    trades : pd.DataFrame
+        Trade data.
+    price_col : str
+        Column name for price.
+    notional_col : str
+        Column name for notional value.
+    notional_threshold : float
+        Maximum notional for retail classification.
+
+    Returns
+    -------
+    pd.Series
+        Boolean series, True for retail trades.
+
+    Examples
+    --------
+    >>> trades = pd.DataFrame({
+    ...     'price': [100.501, 100.50, 100.123],
+    ...     'notional': [50_000, 50_000, 300_000]
+    ... })
+    >>> classify_retail_trades(trades)
+    0     True
+    1    False
+    2    False
+    dtype: bool
+    """
+    has_subpenny = (trades[price_col] * 100) % 1 > 0
+    below_threshold = trades[notional_col] < notional_threshold
+    return has_subpenny & below_threshold
 
 
 def qmp_classify(
@@ -64,6 +190,66 @@ def qmp_classify(
     return "buy" if price > cutoff else "sell"
 
 
+def qmp_classify_with_exclusion(
+    price: float,
+    bid: float,
+    ask: float,
+    exclusion_low: float = NBBO_EXCLUSION_LOW,
+    exclusion_high: float = NBBO_EXCLUSION_HIGH,
+) -> Literal["buy", "sell", "neutral"]:
+    """
+    Classify trade direction using Lee-Ready QMP with NBBO exclusion zone.
+
+    Trades within the 40-60% exclusion zone are marked as neutral
+    and should be excluded from imbalance calculations.
+
+    Parameters
+    ----------
+    price : float
+        Execution price of the trade.
+    bid : float
+        Best bid price.
+    ask : float
+        Best ask price.
+    exclusion_low : float, default 0.40
+        Lower bound of exclusion zone (fraction of spread from bid).
+    exclusion_high : float, default 0.60
+        Upper bound of exclusion zone (fraction of spread from bid).
+
+    Returns
+    -------
+    Literal["buy", "sell", "neutral"]
+        Trade direction. "neutral" for trades in exclusion zone.
+
+    Examples
+    --------
+    >>> qmp_classify_with_exclusion(price=100.8, bid=100.0, ask=101.0)
+    'buy'
+    >>> qmp_classify_with_exclusion(price=100.2, bid=100.0, ask=101.0)
+    'sell'
+    >>> qmp_classify_with_exclusion(price=100.5, bid=100.0, ask=101.0)
+    'neutral'  # In 40-60% zone
+
+    Notes
+    -----
+    Based on Lee-Ready QMP with exclusion zone [cite: 1200].
+    The exclusion zone filters ambiguous trades near the midpoint.
+    """
+    spread = ask - bid
+    if spread <= 0:
+        return "neutral"
+
+    # Position of price within the spread (0 = bid, 1 = ask)
+    price_position = (price - bid) / spread
+
+    if price_position > exclusion_high:
+        return "buy"
+    elif price_position < exclusion_low:
+        return "sell"
+    else:
+        return "neutral"
+
+
 def classify_trades_qmp(
     trades: pd.DataFrame,
     price_col: str = "price",
@@ -95,6 +281,71 @@ def classify_trades_qmp(
     cutoff = trades[mid_col] + threshold * trades[spread_col]
     return pd.Series(
         np.where(trades[price_col] > cutoff, "buy", "sell"),
+        index=trades.index,
+    )
+
+
+def classify_trades_qmp_with_exclusion(
+    trades: pd.DataFrame,
+    price_col: str = "price",
+    bid_col: str = "bid",
+    ask_col: str = "ask",
+    exclusion_low: float = NBBO_EXCLUSION_LOW,
+    exclusion_high: float = NBBO_EXCLUSION_HIGH,
+) -> pd.Series:
+    """
+    Classify all trades using QMP with NBBO exclusion zone.
+
+    Trades within the 40-60% zone are marked as 'neutral' and
+    should be excluded from imbalance calculations.
+
+    Parameters
+    ----------
+    trades : pd.DataFrame
+        Trade data with price, bid, and ask columns.
+    price_col : str
+        Column name for execution price.
+    bid_col : str
+        Column name for bid price.
+    ask_col : str
+        Column name for ask price.
+    exclusion_low : float, default 0.40
+        Lower bound of exclusion zone.
+    exclusion_high : float, default 0.60
+        Upper bound of exclusion zone.
+
+    Returns
+    -------
+    pd.Series
+        Series of 'buy', 'sell', or 'neutral' classifications.
+
+    Examples
+    --------
+    >>> trades = pd.DataFrame({
+    ...     'price': [100.8, 100.2, 100.5],
+    ...     'bid': [100.0, 100.0, 100.0],
+    ...     'ask': [101.0, 101.0, 101.0]
+    ... })
+    >>> classify_trades_qmp_with_exclusion(trades)
+    0       buy
+    1      sell
+    2    neutral
+    dtype: object
+    """
+    spread = trades[ask_col] - trades[bid_col]
+    price_position = (trades[price_col] - trades[bid_col]) / spread
+
+    # Handle zero spread
+    price_position = price_position.replace([np.inf, -np.inf], np.nan)
+
+    conditions = [
+        price_position > exclusion_high,
+        price_position < exclusion_low,
+    ]
+    choices = ["buy", "sell"]
+
+    return pd.Series(
+        np.select(conditions, choices, default="neutral"),
         index=trades.index,
     )
 
