@@ -49,34 +49,6 @@ def annualized_return(
     return float(annualized)
 
 
-def annualized_volatility(
-    returns: pd.Series,
-    periods_per_year: int = 252,
-    ddof: int = 1,
-) -> float:
-    """
-    Compute annualized volatility from a series of periodic returns.
-
-    Parameters
-    ----------
-    returns : pd.Series
-        Periodic returns.
-    periods_per_year : int, default 252
-        Number of periods per year.
-    ddof : int, default 1
-        Degrees of freedom for std calculation.
-
-    Returns
-    -------
-    float
-        Annualized volatility.
-    """
-    if len(returns) < 2:
-        return np.nan
-
-    return float(returns.std(ddof=ddof) * np.sqrt(periods_per_year))
-
-
 def sharpe_ratio(
     returns: pd.Series,
     risk_free: float = 0.0,

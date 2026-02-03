@@ -12,48 +12,6 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def signal_to_positions(
-    signal: pd.DataFrame,
-    method: str = "sign",
-    normalize: bool = True,
-) -> pd.DataFrame:
-    """
-    Convert raw signal to position directions.
-
-    Parameters
-    ----------
-    signal : pd.DataFrame
-        Raw signal values.
-    method : str, default "sign"
-        Conversion method:
-        - "sign": Use sign of signal (-1, 0, +1)
-        - "raw": Use raw signal values
-        - "rank": Use cross-sectional rank
-    normalize : bool, default True
-        Normalize positions to sum to 1 (absolute).
-
-    Returns
-    -------
-    pd.DataFrame
-        Position directions.
-    """
-    if method == "sign":
-        positions = np.sign(signal)
-    elif method == "raw":
-        positions = signal.copy()
-    elif method == "rank":
-        positions = signal.rank(axis=1, pct=True) - 0.5
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
-    if normalize:
-        row_sums = positions.abs().sum(axis=1)
-        row_sums = row_sums.replace(0, 1)  # Avoid division by zero
-        positions = positions.div(row_sums, axis=0)
-
-    return positions
-
-
 def equal_weight(
     signal: pd.DataFrame,
     prices: pd.DataFrame,

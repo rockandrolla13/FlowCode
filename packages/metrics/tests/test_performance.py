@@ -9,7 +9,6 @@ from src.performance import (
     sortino_ratio,
     calmar_ratio,
     annualized_return,
-    annualized_volatility,
 )
 
 

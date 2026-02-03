@@ -9,7 +9,6 @@ from src.triggers import (
     zscore_trigger,
     compute_streak,
     streak_trigger,
-    combined_trigger,
 )
 
 
@@ -160,38 +159,3 @@ class TestStreakTrigger:
         result_4 = streak_trigger(series, min_streak=4)
 
         assert result_2.sum() > result_4.sum()
-
-
-class TestCombinedTrigger:
-    """Tests for combined_trigger function."""
-
-    def test_combined_or(self) -> None:
-        """Test combined trigger with OR logic."""
-        series = pd.Series([0.0] * 50 + [1, 2, 3, 4, 5])
-
-        result = combined_trigger(
-            series,
-            zscore_window=25,
-            zscore_threshold=1.0,
-            min_streak=3,
-            require_both=False,
-        )
-
-        # Either trigger should fire
-        assert result.sum() > 0
-
-    def test_combined_and(self) -> None:
-        """Test combined trigger with AND logic."""
-        series = pd.Series([0.0] * 50 + [1, 2, 3, 4, 5])
-
-        result = combined_trigger(
-            series,
-            zscore_window=25,
-            zscore_threshold=100.0,  # Very high, won't trigger
-            min_streak=3,
-            require_both=True,
-        )
-
-        # Both need to trigger, but zscore won't
-        # So combined should have very few/no triggers
-        assert result.sum() <= streak_trigger(series, min_streak=3).sum()

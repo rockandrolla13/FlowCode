@@ -87,37 +87,6 @@ def load_reference(
     return df
 
 
-def get_cusip_mapping(
-    reference: pd.DataFrame,
-    key_col: str = "cusip",
-    value_col: str = "issuer",
-) -> dict[str, str]:
-    """
-    Create a mapping from CUSIP to another attribute.
-
-    Parameters
-    ----------
-    reference : pd.DataFrame
-        Reference data DataFrame.
-    key_col : str
-        Column to use as dictionary keys.
-    value_col : str
-        Column to use as dictionary values.
-
-    Returns
-    -------
-    dict[str, str]
-        Mapping from key to value.
-
-    Examples
-    --------
-    >>> cusip_to_issuer = get_cusip_mapping(ref, "cusip", "issuer")
-    >>> cusip_to_issuer["037833100"]
-    'APPLE INC'
-    """
-    return dict(zip(reference[key_col], reference[value_col]))
-
-
 def enrich_with_reference(
     trades: pd.DataFrame,
     reference: pd.DataFrame,
