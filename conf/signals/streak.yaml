@@ -1,0 +1,6 @@
+# Streak Signal Configuration
+
+streak:
+  min_streak: 3         # Minimum consecutive same-sign days to trigger
+  max_streak: 10        # Cap streak count (optional)
+  reset_on_zero: true   # Reset streak when signal is exactly zero
