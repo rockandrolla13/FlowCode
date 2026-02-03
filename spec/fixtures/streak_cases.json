@@ -1,63 +1,102 @@
 {
-  "description": "Golden test cases for streak trigger",
+  "description": "Test cases for streak trigger",
   "spec_section": "§2.2",
-  "formula": "streak_t = consecutive days with same sign(X)",
+  "formula": "Count consecutive same-sign values, trigger if streak >= min_streak",
+  "params": {"min_streak": 3},
   "cases": [
     {
-      "name": "positive_streak_3",
+      "name": "positive_streak_triggers",
       "input": {
-        "values": [0.1, 0.2, 0.15],
-        "min_streak": 3
+        "values": [0.1, 0.2, 0.15, 0.3]
       },
-      "expected_streak": 3,
-      "expected_trigger": 1
+      "expected": {
+        "streak": 4,
+        "triggered": true,
+        "direction": 1
+      },
+      "note": "4 consecutive positive values"
     },
     {
-      "name": "negative_streak_3",
+      "name": "negative_streak_triggers",
       "input": {
-        "values": [-0.1, -0.2, -0.15],
-        "min_streak": 3
+        "values": [-0.1, -0.2, -0.15]
       },
-      "expected_streak": 3,
-      "expected_trigger": -1
+      "expected": {
+        "streak": 3,
+        "triggered": true,
+        "direction": -1
+      },
+      "note": "Exactly min_streak negative values"
     },
     {
-      "name": "streak_broken",
+      "name": "streak_too_short",
       "input": {
-        "values": [0.1, 0.2, -0.1, 0.15],
-        "min_streak": 3
+        "values": [0.1, 0.2]
       },
-      "expected_streak": 1,
-      "expected_trigger": 0,
-      "note": "Streak resets after sign change"
+      "expected": {
+        "streak": 2,
+        "triggered": false,
+        "direction": 0
+      },
+      "note": "2 < min_streak of 3"
     },
     {
-      "name": "insufficient_streak",
+      "name": "streak_broken_by_sign_change",
       "input": {
-        "values": [0.1, 0.2],
-        "min_streak": 3
+        "values": [0.1, 0.2, -0.1, 0.3, 0.4]
       },
-      "expected_streak": 2,
-      "expected_trigger": 0
-    },
-    {
-      "name": "long_positive_streak",
-      "input": {
-        "values": [0.1, 0.2, 0.15, 0.12, 0.18],
-        "min_streak": 3
+      "expected": {
+        "streak": 2,
+        "triggered": false,
+        "direction": 0
       },
-      "expected_streak": 5,
-      "expected_trigger": 1
+      "note": "Current streak is 2 (last two positive)"
     },
     {
       "name": "zero_breaks_streak",
       "input": {
-        "values": [0.1, 0.2, 0.0, 0.15],
-        "min_streak": 3
+        "values": [0.1, 0.2, 0.0, 0.3]
       },
-      "expected_streak": 1,
-      "expected_trigger": 0,
-      "note": "Zero counts as no direction"
+      "expected": {
+        "streak": 1,
+        "triggered": false,
+        "direction": 0
+      },
+      "note": "Zero has no sign, breaks streak"
+    },
+    {
+      "name": "alternating_signs",
+      "input": {
+        "values": [0.1, -0.1, 0.1, -0.1, 0.1]
+      },
+      "expected": {
+        "streak": 1,
+        "triggered": false,
+        "direction": 0
+      },
+      "note": "Never builds streak > 1"
+    },
+    {
+      "name": "empty_input",
+      "input": {
+        "values": []
+      },
+      "expected": {
+        "streak": 0,
+        "triggered": false,
+        "direction": 0
+      }
+    },
+    {
+      "name": "single_value",
+      "input": {
+        "values": [0.5]
+      },
+      "expected": {
+        "streak": 1,
+        "triggered": false,
+        "direction": 0
+      }
     }
   ]
 }

@@ -1,60 +1,88 @@
 {
-  "description": "Golden test cases for z-score trigger",
+  "description": "Test cases for z-score trigger",
   "spec_section": "§2.1",
-  "formula": "Z_t = (X_t - μ) / σ",
+  "formula": "Z_t = (value - μ) / σ, trigger if |Z| > threshold",
+  "params": {"window": 5, "threshold": 2.0, "min_periods": 3},
   "cases": [
     {
-      "name": "above_threshold",
+      "name": "positive_trigger",
       "input": {
-        "values": [0.1, 0.1, 0.1, 0.1, 0.1, 0.8],
-        "window": 5,
-        "threshold": 2.0
+        "value": 10.0,
+        "history": [1.0, 2.0, 1.5, 1.8, 2.2]
       },
-      "expected_zscore": 3.13,
-      "expected_trigger": 1,
+      "expected": {
+        "zscore": 17.89,
+        "triggered": true,
+        "direction": 1
+      },
+      "tolerance": 0.01,
+      "note": "μ=1.7, σ=0.45, Z=(10-1.7)/0.45=18.4"
+    },
+    {
+      "name": "negative_trigger",
+      "input": {
+        "value": -5.0,
+        "history": [1.0, 2.0, 1.5, 1.8, 2.2]
+      },
+      "expected": {
+        "zscore": -14.89,
+        "triggered": true,
+        "direction": -1
+      },
       "tolerance": 0.01
     },
     {
-      "name": "below_negative_threshold",
+      "name": "no_trigger_within_band",
       "input": {
-        "values": [0.5, 0.5, 0.5, 0.5, 0.5, 0.0],
-        "window": 5,
-        "threshold": 2.0
+        "value": 2.0,
+        "history": [1.0, 2.0, 1.5, 1.8, 2.2]
       },
-      "expected_zscore": -2.24,
-      "expected_trigger": -1,
-      "tolerance": 0.01
+      "expected": {
+        "zscore": 0.67,
+        "triggered": false,
+        "direction": 0
+      },
+      "tolerance": 0.01,
+      "note": "Z=0.67 < 2.0 threshold"
     },
     {
-      "name": "within_threshold",
+      "name": "exactly_at_threshold",
       "input": {
-        "values": [0.1, 0.2, 0.15, 0.12, 0.18, 0.16],
-        "window": 5,
-        "threshold": 2.0
+        "value": 2.6,
+        "history": [1.0, 1.0, 1.0, 1.0, 1.0]
       },
-      "expected_trigger": 0,
-      "note": "Value within normal range, no trigger"
+      "expected": {
+        "zscore": null,
+        "triggered": false,
+        "direction": 0
+      },
+      "note": "σ=0 when all same, handle gracefully"
     },
     {
       "name": "insufficient_history",
       "input": {
-        "values": [0.1, 0.2],
-        "window": 5,
-        "threshold": 2.0
+        "value": 5.0,
+        "history": [1.0, 2.0]
       },
-      "expected_zscore": null,
-      "expected_trigger": 0,
-      "note": "Not enough data points"
+      "expected": {
+        "zscore": null,
+        "triggered": false,
+        "direction": 0
+      },
+      "note": "Less than min_periods=3"
     },
     {
-      "name": "extreme_positive",
+      "name": "zero_std",
       "input": {
-        "values": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
-        "window": 5,
-        "threshold": 7.0
+        "value": 5.0,
+        "history": [2.0, 2.0, 2.0, 2.0, 2.0]
       },
-      "expected_trigger": 1,
-      "note": "Extreme deviation, exceeds threshold"
+      "expected": {
+        "zscore": null,
+        "triggered": false,
+        "direction": 0
+      },
+      "note": "σ=0, cannot compute z-score"
     }
   ]
 }

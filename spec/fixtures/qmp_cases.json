@@ -1,0 +1,56 @@
+{
+  "description": "Test cases for QMP trade classification",
+  "spec_section": "§1.2",
+  "formula": "BUY if Price > Mid + α×Spread, SELL if Price < Mid - α×Spread, else NEUTRAL",
+  "params": {"alpha": 0.1},
+  "cases": [
+    {
+      "name": "clear_buy",
+      "input": {"price": 100.5, "bid": 99.0, "ask": 101.0},
+      "expected": "BUY",
+      "note": "Mid=100, Spread=2, threshold=0.2, price > 100.2"
+    },
+    {
+      "name": "clear_sell",
+      "input": {"price": 99.5, "bid": 99.0, "ask": 101.0},
+      "expected": "SELL",
+      "note": "price < 99.8"
+    },
+    {
+      "name": "neutral_at_mid",
+      "input": {"price": 100.0, "bid": 99.0, "ask": 101.0},
+      "expected": "NEUTRAL",
+      "note": "Exactly at midpoint"
+    },
+    {
+      "name": "neutral_within_band",
+      "input": {"price": 100.1, "bid": 99.0, "ask": 101.0},
+      "expected": "NEUTRAL",
+      "note": "100.1 is within [99.8, 100.2]"
+    },
+    {
+      "name": "buy_at_boundary",
+      "input": {"price": 100.21, "bid": 99.0, "ask": 101.0},
+      "expected": "BUY",
+      "note": "Just above upper threshold"
+    },
+    {
+      "name": "sell_at_boundary",
+      "input": {"price": 99.79, "bid": 99.0, "ask": 101.0},
+      "expected": "SELL",
+      "note": "Just below lower threshold"
+    },
+    {
+      "name": "tight_spread",
+      "input": {"price": 100.05, "bid": 99.9, "ask": 100.1},
+      "expected": "BUY",
+      "note": "Mid=100, Spread=0.2, threshold=0.02, price > 100.02"
+    },
+    {
+      "name": "wide_spread",
+      "input": {"price": 101.0, "bid": 95.0, "ask": 105.0},
+      "expected": "NEUTRAL",
+      "note": "Mid=100, Spread=10, threshold=1.0, 101 within [99, 101]"
+    }
+  ]
+}
