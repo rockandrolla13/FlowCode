@@ -19,17 +19,23 @@ Create these foundation files in order:
    - §2.1 Z-score trigger: `Z_t = (I_t - μ) / σ`, trigger when `|Z| > threshold`
    - §2.2 Streak trigger: consecutive same-sign days, trigger when `streak ≥ min_streak`
 5. **spec/fixtures/imbalance_cases.json** - test cases for imbalance
-6. **spec/fixtures/zscore_cases.json** - test cases for z-score
-7. **spec/fixtures/streak_cases.json** - test cases for streak
-8. **packages/signals/pyproject.toml**
-9. **packages/signals/src/__init__.py**
-10. **packages/signals/src/params.py** - frozen dataclass parameters (see below)
-11. **packages/signals/src/triggers.py** - implement `zscore_trigger()` and `streak_trigger()`
-12. **packages/signals/src/imbalance.py** - implement `compute_imbalance()` and `qmp_classify()`
-13. **packages/signals/tests/conftest.py** - fixture loading helpers
-14. **packages/signals/tests/test_triggers.py** - fixture-driven tests
+6. **spec/fixtures/qmp_cases.json** - test cases for QMP classification
+7. **spec/fixtures/zscore_cases.json** - test cases for z-score
+8. **spec/fixtures/streak_cases.json** - test cases for streak
+9. **packages/signals/pyproject.toml**
+10. **packages/signals/src/__init__.py**
+11. **packages/signals/src/params.py** - frozen dataclass parameters (ZScoreParams, StreakParams, QMPParams)
+12. **packages/signals/src/imbalance.py** - implement:
+    - `compute_imbalance(buy_volume: Series, sell_volume: Series) -> Series`
+    - `qmp_classify(price, bid, ask) -> str`
+    - `qmp_classify_series(price, bid, ask: Series) -> Series`
+13. **packages/signals/src/triggers.py** - implement:
+    - Point-in-time: `zscore_trigger()`, `streak_trigger()` → NamedTuple results
+    - Vectorized: `compute_zscore_signal()`, `compute_streak_signal()` → DataFrame
+14. **packages/signals/tests/conftest.py** - fixture loading helpers
 15. **packages/signals/tests/test_imbalance.py** - fixture-driven tests
-16. **tools/verify_spec_parity.py** - checks spec matches code
+16. **packages/signals/tests/test_triggers.py** - fixture-driven tests
+17. **tools/verify_spec_parity.py** - checks spec matches code
 
 After creating all files, run: `uv sync && uv run pytest packages/signals/tests/ -v`
 
@@ -123,10 +129,12 @@ class QMPParams:
 
 ### Function Signatures
 
-Functions accept params with defaults, so tests use defaults but users can override:
+**Design Principles:**
+- `compute_imbalance`: Accepts individual Series (explicit inputs, no hidden column dependencies)
+- Trigger functions: Two variants each - point-in-time (scalar) and vectorized (Series)
+- All functions accept params with defaults, so tests use defaults but users can override
 
 ```python
-from dataclasses import dataclass
 from typing import NamedTuple
 
 import numpy as np
@@ -135,19 +143,102 @@ import pandas as pd
 from .params import ZScoreParams, StreakParams, QMPParams
 
 
+# =============================================================================
+# Result Types
+# =============================================================================
+
 class ZScoreResult(NamedTuple):
-    """Result of z-score calculation."""
-    zscore: float
+    """Result of point-in-time z-score calculation."""
+    zscore: float | None  # None if cannot compute
     triggered: bool
     direction: int  # +1, -1, or 0
 
 
 class StreakResult(NamedTuple):
-    """Result of streak calculation."""
+    """Result of point-in-time streak calculation."""
     streak: int
     triggered: bool
     direction: int  # +1, -1, or 0
 
+
+# =============================================================================
+# Imbalance Functions (imbalance.py)
+# =============================================================================
+
+def compute_imbalance(
+    buy_volume: pd.Series,
+    sell_volume: pd.Series,
+) -> pd.Series:
+    """
+    Compute order imbalance from buy/sell volumes.
+
+    Parameters
+    ----------
+    buy_volume : pd.Series
+        Buy volume, indexed by date (or MultiIndex [date, cusip]).
+    sell_volume : pd.Series
+        Sell volume, same index as buy_volume.
+
+    Returns
+    -------
+    pd.Series
+        Imbalance in [-1, +1], NaN where total volume is zero.
+
+    Notes
+    -----
+    Formula: I = (buy - sell) / (buy + sell)
+    """
+    ...
+
+
+def qmp_classify(
+    price: float,
+    bid: float,
+    ask: float,
+    params: QMPParams = QMPParams(),
+) -> str:
+    """
+    Classify single trade direction using QMP rule.
+
+    Parameters
+    ----------
+    price : float
+        Execution price.
+    bid : float
+        Best bid price.
+    ask : float
+        Best ask price.
+    params : QMPParams
+        Configuration parameters.
+
+    Returns
+    -------
+    str
+        'BUY', 'SELL', or 'NEUTRAL'.
+    """
+    ...
+
+
+def qmp_classify_series(
+    price: pd.Series,
+    bid: pd.Series,
+    ask: pd.Series,
+    params: QMPParams = QMPParams(),
+) -> pd.Series:
+    """
+    Classify trade direction for entire Series (vectorized).
+
+    Returns
+    -------
+    pd.Series
+        Series of 'BUY', 'SELL', or 'NEUTRAL' strings.
+    """
+    ...
+
+
+# =============================================================================
+# Trigger Functions - Point-in-Time (triggers.py)
+# =============================================================================
 
 def zscore_trigger(
     value: float,
@@ -155,7 +246,7 @@ def zscore_trigger(
     params: ZScoreParams = ZScoreParams(),
 ) -> ZScoreResult:
     """
-    Compute z-score and check if trigger threshold exceeded.
+    Compute z-score for single value and check trigger.
 
     Parameters
     ----------
@@ -179,7 +270,7 @@ def streak_trigger(
     params: StreakParams = StreakParams(),
 ) -> StreakResult:
     """
-    Count consecutive same-sign values and check trigger.
+    Count consecutive same-sign values at end of series.
 
     Parameters
     ----------
@@ -191,57 +282,128 @@ def streak_trigger(
     Returns
     -------
     StreakResult
-        Streak length, whether triggered, and direction.
+        Current streak length, whether triggered, and direction.
     """
     ...
 
 
-def qmp_classify(
-    price: float,
-    bid: float,
-    ask: float,
-    params: QMPParams = QMPParams(),
-) -> str:
+# =============================================================================
+# Trigger Functions - Vectorized for Backtesting (triggers.py)
+# =============================================================================
+
+def compute_zscore_signal(
+    series: pd.Series,
+    params: ZScoreParams = ZScoreParams(),
+) -> pd.DataFrame:
     """
-    Classify trade direction using QMP rule.
+    Compute z-score signal for entire series (vectorized).
 
     Parameters
     ----------
-    price : float
-        Execution price.
-    bid : float
-        Best bid price.
-    ask : float
-        Best ask price.
-    params : QMPParams
+    series : pd.Series
+        Input values indexed by date.
+    params : ZScoreParams
         Configuration parameters.
 
     Returns
     -------
-    str
-        'BUY', 'SELL', or 'NEUTRAL'.
+    pd.DataFrame
+        Columns:
+        - zscore: float, rolling z-score (NaN if insufficient history)
+        - triggered: bool, True if |zscore| > threshold
+        - direction: int, +1 if zscore > threshold, -1 if < -threshold, else 0
+    """
+    ...
+
+
+def compute_streak_signal(
+    series: pd.Series,
+    params: StreakParams = StreakParams(),
+) -> pd.DataFrame:
+    """
+    Compute streak signal for entire series (vectorized).
+
+    Parameters
+    ----------
+    series : pd.Series
+        Input values indexed by date.
+    params : StreakParams
+        Configuration parameters.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns:
+        - streak: int, current streak length at each point
+        - triggered: bool, True if streak >= min_streak
+        - direction: int, +1 if positive streak triggers, -1 if negative, else 0
     """
     ...
 ```
+
+### API Summary Table
+
+| Function | Input | Output | Use Case |
+|----------|-------|--------|----------|
+| `compute_imbalance` | `buy: Series, sell: Series` | `Series[float]` | Core calculation |
+| `qmp_classify` | `price, bid, ask: float` | `str` | Single trade |
+| `qmp_classify_series` | `price, bid, ask: Series` | `Series[str]` | Batch classification |
+| `zscore_trigger` | `value: float, history: Series` | `ZScoreResult` | Real-time/streaming |
+| `streak_trigger` | `values: Series` | `StreakResult` | Real-time/streaming |
+| `compute_zscore_signal` | `series: Series` | `DataFrame` | Backtesting |
+| `compute_streak_signal` | `series: Series` | `DataFrame` | Backtesting |
 
 ---
 
 ## Usage Examples
 
-### Default parameters (tests)
+### Compute Imbalance (Series in, Series out)
 ```python
-result = zscore_trigger(value=0.5, history=history)
-assert result.triggered == True
+# Caller extracts columns - explicit and flexible
+imbalance = compute_imbalance(df["buy_volume"], df["sell_volume"])
 ```
 
-### Custom parameters (production)
+### QMP Classification
 ```python
+# Single trade (real-time)
+direction = qmp_classify(price=100.5, bid=99.0, ask=101.0)
+
+# Batch classification (vectorized)
+df["side"] = qmp_classify_series(df["price"], df["bid"], df["ask"])
+```
+
+### Point-in-Time Triggers (real-time/streaming)
+```python
+# Z-score trigger
+result = zscore_trigger(value=0.5, history=history)
+if result.triggered:
+    print(f"Signal: {result.direction}, Z={result.zscore:.2f}")
+
+# Streak trigger
+result = streak_trigger(values=recent_imbalances)
+if result.triggered:
+    print(f"Streak of {result.streak} days, direction={result.direction}")
+```
+
+### Vectorized Signals (backtesting)
+```python
+# Returns DataFrame with zscore, triggered, direction columns
+signal_df = compute_zscore_signal(imbalance_series)
+
+# Filter to triggered entries
+entries = signal_df[signal_df["triggered"]]
+
+# Use direction for position sizing
+positions = signal_df["direction"]  # +1, -1, or 0
+```
+
+### Custom Parameters
+```python
+# Override all params
 conservative = ZScoreParams(window=504, threshold=10.0, min_periods=252)
 result = zscore_trigger(value=0.5, history=history, params=conservative)
-```
 
-### Override single param
-```python
+# Override single param using dataclasses.replace
 from dataclasses import replace
 
 default = ZScoreParams()
