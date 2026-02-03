@@ -12,46 +12,113 @@ This document is the **single source of truth** for all formulas, algorithms, an
 
 **Formula:**
 ```
-PnL_t = -PVBP * ΔSpread_t
+Credit_PnL = -(ΔSpread) × (PVBP / MidPrice)
 ```
 
 Where:
-- `PVBP` = Price Value of a Basis Point (dollar duration)
-- `ΔSpread_t` = Spread change from t-1 to t (in basis points)
+- `ΔSpread` = Spread change (e.g., 1-week, in basis points)
+- `PVBP` = Price Value of a Basis Point (DV01)
+- `MidPrice` = Mid price of the bond
 
-**Code Location:** `packages/core/src/spread_pnl.py`
+**Logic:**
+- Negative spread change (tightening) → positive PnL for long positions
+- PVBP is typically expressed per $100 notional
+
+**Code Location:** `packages/signals/src/credit.py::credit_pnl()`
 **Fixture:** `spec/fixtures/pnl_cases.json`
 
-### 1.2 Retail Order Imbalance
+### 1.2 Range Position
 
 **Formula:**
 ```
-I_t = (B_t - S_t) / (B_t + S_t)
+RangePos = (Spread_curr - Spread_avg) / (Spread_max - Spread_min)
 ```
 
 Where:
-- `B_t` = Buy volume at time t (retail)
-- `S_t` = Sell volume at time t (retail)
+- `Spread_curr` = Current spread value
+- `Spread_avg` = Average spread over lookback window (e.g., 1 month)
+- `Spread_max` = Maximum spread over lookback window
+- `Spread_min` = Minimum spread over lookback window
+
+**Output:**
+- Values near 0 = spread is near average
+- Positive values = wider than average (value opportunity)
+- Negative values = tighter than average (expensive)
+- Result is unbounded (can exceed [-1, 1] if current spread exceeds historical range)
+
+**Edge Cases:**
+- If `Spread_max == Spread_min`, return `NaN` (no range)
+
+**Code Location:** `packages/signals/src/credit.py::range_position()`
+**Fixture:** `spec/fixtures/range_position_cases.json`
+
+### 1.3 Retail Order Imbalance
+
+**Formula:**
+```
+I_t = (ΣBuy - ΣSell) / (ΣBuy + ΣSell)
+```
+
+Where:
+- `ΣBuy` = Sum of buy volume at time t (retail only)
+- `ΣSell` = Sum of sell volume at time t (retail only)
 - Result: [-1, +1], where +1 = all buys, -1 = all sells
 
 **Edge Cases:**
-- If `B_t + S_t = 0`, return `NaN`
+- If `ΣBuy + ΣSell = 0`, return `NaN`
 - If only buys: return `+1`
 - If only sells: return `-1`
 
 **Code Location:** `packages/signals/src/retail.py::compute_retail_imbalance()`
 **Fixture:** `spec/fixtures/imbalance_cases.json`
 
-### 1.3 QMP Classification
+### 1.4 Retail Trade Identification (BJZZ)
 
-**Definition:**
-QMP (Qualifying Market Participant) classification distinguishes retail vs institutional trades.
+**Identification Rule:**
+A trade is retail if BOTH conditions are met:
+```
+1. Notional < $200,000
+2. mod(Price × 100, 1) > 0  (subpenny pricing)
+```
 
-**Rules:**
-- Trade size ≤ $100,000 → Retail
-- Trade size > $100,000 → Institutional
+**Logic:**
+- Subpenny pricing indicates price improvement from wholesalers
+- Price improvement is characteristic of retail order flow
+- Large trades (≥$200K) are institutional regardless of pricing
 
-**Code Location:** `packages/signals/src/retail.py::qmp_classify()`
+**Code Location:** `packages/signals/src/retail.py::is_retail_trade()`
+**Fixture:** `spec/fixtures/retail_id_cases.json`
+
+### 1.5 QMP Classification (Quote Midpoint)
+
+**Basic QMP Rule:**
+```
+BUY    if Price > Midpoint + (α × Spread)
+SELL   if Price < Midpoint - (α × Spread)
+NEUTRAL otherwise
+```
+
+Where:
+- `Midpoint = (Bid + Ask) / 2`
+- `Spread = Ask - Bid`
+- `α = 0.1` (default threshold)
+
+**Lee-Ready QMP with NBBO Exclusion Zone:**
+```
+Position = (Price - Bid) / Spread
+
+BUY     if Position > 0.60  (above 60% of spread)
+SELL    if Position < 0.40  (below 40% of spread)
+NEUTRAL if 0.40 ≤ Position ≤ 0.60  (in exclusion zone)
+```
+
+**Logic:**
+- Trades near the midpoint (40-60% zone) are ambiguous
+- Excluding them reduces noise in direction classification
+
+**Code Locations:**
+- Basic: `packages/signals/src/retail.py::qmp_classify()`
+- With exclusion: `packages/signals/src/retail.py::qmp_classify_with_exclusion()`
 **Fixture:** `spec/fixtures/qmp_cases.json`
 
 ---
@@ -282,9 +349,12 @@ Net_Return_t = Gross_Return_t - Cost_t
 
 | Formula | Spec § | Code Location | Fixture |
 |---------|--------|---------------|---------|
-| Credit PnL | §1.1 | core.spread_pnl() | pnl_cases.json |
-| Imbalance | §1.2 | signals.retail.compute_retail_imbalance() | imbalance_cases.json |
-| QMP | §1.3 | signals.retail.qmp_classify() | qmp_cases.json |
+| Credit PnL | §1.1 | signals.credit.credit_pnl() | pnl_cases.json |
+| Range Position | §1.2 | signals.credit.range_position() | range_position_cases.json |
+| Imbalance | §1.3 | signals.retail.compute_retail_imbalance() | imbalance_cases.json |
+| Retail ID (BJZZ) | §1.4 | signals.retail.is_retail_trade() | retail_id_cases.json |
+| QMP Basic | §1.5 | signals.retail.qmp_classify() | qmp_cases.json |
+| QMP Exclusion | §1.5 | signals.retail.qmp_classify_with_exclusion() | qmp_cases.json |
 | Z-score | §2.1 | signals.triggers.zscore_trigger() | zscore_cases.json |
 | Streak | §2.2 | signals.triggers.streak_trigger() | streak_cases.json |
 | Sharpe | §3.1 | metrics.performance.sharpe_ratio() | sharpe_cases.json |

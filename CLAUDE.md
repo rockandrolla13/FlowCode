@@ -163,13 +163,16 @@ All formulas live in `spec/SPEC.md`. Code must match spec. Tests verify parity.
 
 | Formula | Spec Section | Code Location | Test Fixture |
 |---------|--------------|---------------|--------------|
-| Credit_PnL | §1.1 | `core.spread_pnl()` | `fixtures/pnl_cases.json` |
-| Imbalance I_t | §1.2 | `core.imbalance()` | `fixtures/imbalance_cases.json` |
-| QMP Classification | §1.2 | `signals.retail.qmp_classify()` | `fixtures/qmp_cases.json` |
-| Z-score | §2.1 | `signals.triggers.zscore()` | `fixtures/zscore_cases.json` |
-| Streak | §2.2 | `signals.triggers.streak()` | `fixtures/streak_cases.json` |
-| Sharpe Ratio | §3.1 | `metrics.performance.sharpe()` | `fixtures/sharpe_cases.json` |
-| Max Drawdown | §3.2 | `metrics.risk.max_drawdown()` | `fixtures/drawdown_cases.json` |
+| Credit PnL | §1.1 | `signals.credit.credit_pnl()` | `fixtures/pnl_cases.json` |
+| Range Position | §1.2 | `signals.credit.range_position()` | `fixtures/range_position_cases.json` |
+| Imbalance I_t | §1.3 | `signals.retail.compute_retail_imbalance()` | `fixtures/imbalance_cases.json` |
+| Retail ID (BJZZ) | §1.4 | `signals.retail.is_retail_trade()` | `fixtures/retail_id_cases.json` |
+| QMP Basic | §1.5 | `signals.retail.qmp_classify()` | `fixtures/qmp_cases.json` |
+| QMP Exclusion | §1.5 | `signals.retail.qmp_classify_with_exclusion()` | `fixtures/qmp_cases.json` |
+| Z-score | §2.1 | `signals.triggers.zscore_trigger()` | `fixtures/zscore_cases.json` |
+| Streak | §2.2 | `signals.triggers.streak_trigger()` | `fixtures/streak_cases.json` |
+| Sharpe Ratio | §3.1 | `metrics.performance.sharpe_ratio()` | `fixtures/sharpe_cases.json` |
+| Max Drawdown | §4.1 | `metrics.risk.max_drawdown()` | `fixtures/drawdown_cases.json` |
 
 ### Parity Check
 ```bash
@@ -198,11 +201,22 @@ Data loading layer. **Only package that reads files.**
 
 ## Package: signals/
 
-Signal computations. Thin wrappers over `core/`.
+Signal computations. Contains retail identification, credit metrics, and triggers.
 
 ### Public API
+
+**Retail (retail.py):**
 - `compute_retail_imbalance(trades)` → Imbalance series
+- `is_retail_trade(price, notional)` → bool (BJZZ method)
+- `is_subpenny(price)` → bool (subpenny check)
 - `qmp_classify(price, mid, spread)` → 'buy' or 'sell'
+- `qmp_classify_with_exclusion(price, bid, ask)` → 'buy', 'sell', or 'neutral'
+
+**Credit (credit.py):**
+- `credit_pnl(spread_change, pvbp, mid_price)` → Credit P&L series
+- `range_position(spread_curr, avg, max, min)` → Range position series
+
+**Triggers (triggers.py):**
 - `zscore_trigger(series, window, threshold)` → Boolean trigger
 - `streak_trigger(series, min_streak)` → Boolean trigger
 

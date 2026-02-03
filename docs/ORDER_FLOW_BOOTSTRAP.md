@@ -15,7 +15,10 @@ Create these foundation files in order:
 3. **CLAUDE.md** (root) - navigation map, global rules, and Formula Registry table
 4. **spec/SPEC.md** - formulas for:
    - §1.1 Credit PnL: `Credit_PnL = -(ΔSpread) × (PVBP / MidPrice)`
-   - §1.2 Retail Imbalance: `I_t = (ΣBuy - ΣSell) / (ΣBuy + ΣSell)` with QMP classification
+   - §1.2 Range Position: `RangePos = (Spread_curr - Spread_avg) / (Spread_max - Spread_min)`
+   - §1.3 Retail Imbalance: `I_t = (ΣBuy - ΣSell) / (ΣBuy + ΣSell)`
+   - §1.4 Retail Identification (BJZZ): `Notional < $200k AND mod(Price × 100, 1) > 0`
+   - §1.5 QMP Classification with NBBO exclusion zone (40-60%)
    - §2.1 Z-score trigger: `Z_t = (I_t - μ) / σ`, trigger when `|Z| > threshold`
    - §2.2 Streak trigger: consecutive same-sign days, trigger when `streak ≥ min_streak`
 5. **spec/fixtures/imbalance_cases.json** - test cases for imbalance
@@ -41,9 +44,25 @@ After creating all files, run: `uv sync && uv run pytest packages/signals/tests/
 
 ---
 
+## Retail Identification (BJZZ Subpenny Logic)
+
+A trade is classified as retail if BOTH conditions are met:
+
+```
+1. Notional < $200,000
+2. mod(Price × 100, 1) > 0  (subpenny pricing)
+```
+
+**Logic:**
+- Subpenny pricing indicates price improvement from wholesalers
+- Price improvement is characteristic of retail order flow
+- Large trades (≥$200K) are institutional regardless of pricing
+
+---
+
 ## QMP Classification Rule
 
-QMP (Quote Midpoint) rule classifies trade direction based on execution price relative to the quote midpoint:
+### Basic QMP Rule
 
 ```
 BUY    if Price > Midpoint + (α × Spread)
@@ -56,12 +75,49 @@ Where:
 - `Spread = Ask - Bid`
 - `α = 0.1` (default) - threshold to avoid classifying mid-price trades as directional
 
+### Lee-Ready QMP with NBBO Exclusion Zone
+
+```
+Position = (Price - Bid) / Spread
+
+BUY     if Position > 0.60  (above 60% of spread)
+SELL    if Position < 0.40  (below 40% of spread)
+NEUTRAL if 0.40 ≤ Position ≤ 0.60  (in exclusion zone)
+```
+
+**Logic:**
+- Trades near the midpoint (40-60% zone) are ambiguous
+- Excluding them reduces noise in direction classification
+
 Example with α=0.1:
 - Bid=99, Ask=101 → Midpoint=100, Spread=2
 - Threshold band: [100 - 0.2, 100 + 0.2] = [99.8, 100.2]
 - Price=100.5 → BUY (above 100.2)
 - Price=99.5 → SELL (below 99.8)
 - Price=100.0 → NEUTRAL (within band)
+
+---
+
+## Credit Metrics
+
+### Credit PnL
+
+```
+Credit_PnL = -(ΔSpread) × (PVBP / MidPrice)
+```
+
+- Negative spread change (tightening) → positive PnL
+- PVBP is typically expressed per $100 notional
+
+### Range Position
+
+```
+RangePos = (Spread_curr - Spread_avg) / (Spread_max - Spread_min)
+```
+
+- Values near 0 = spread is near historical average
+- Positive values = wider than average (potential value)
+- Negative values = tighter than average (expensive)
 
 ---
 
@@ -345,9 +401,20 @@ def compute_streak_signal(
 
 | Function | Input | Output | Use Case |
 |----------|-------|--------|----------|
+| **Imbalance** | | | |
 | `compute_imbalance` | `buy: Series, sell: Series` | `Series[float]` | Core calculation |
-| `qmp_classify` | `price, bid, ask: float` | `str` | Single trade |
-| `qmp_classify_series` | `price, bid, ask: Series` | `Series[str]` | Batch classification |
+| **Retail Identification** | | | |
+| `is_subpenny` | `price: float` | `bool` | Check subpenny pricing |
+| `is_retail_trade` | `price, notional: float` | `bool` | BJZZ retail check |
+| `classify_retail_trades` | `trades: DataFrame` | `Series[bool]` | Batch retail classification |
+| **QMP Classification** | | | |
+| `qmp_classify` | `price, mid, spread: float` | `str` | Basic QMP (single) |
+| `qmp_classify_with_exclusion` | `price, bid, ask: float` | `str` | QMP with 40-60% exclusion |
+| `classify_trades_qmp_with_exclusion` | `trades: DataFrame` | `Series[str]` | Batch with exclusion |
+| **Credit Metrics** | | | |
+| `credit_pnl` | `spread_change, pvbp, mid_price: Series` | `Series[float]` | Credit P&L |
+| `range_position` | `spread_curr, avg, max, min: Series` | `Series[float]` | Spread vs history |
+| **Triggers** | | | |
 | `zscore_trigger` | `value: float, history: Series` | `ZScoreResult` | Real-time/streaming |
 | `streak_trigger` | `values: Series` | `StreakResult` | Real-time/streaming |
 | `compute_zscore_signal` | `series: Series` | `DataFrame` | Backtesting |
