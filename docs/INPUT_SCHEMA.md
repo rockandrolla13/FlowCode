@@ -93,6 +93,9 @@ date,cusip,price,volume,side
 | `coupon` | float | Coupon rate (e.g., 0.05 for 5%) | No |
 | `issue_date` | datetime | Issue date | No |
 | `amount_outstanding` | float | Amount outstanding in millions | No |
+| `sector` | str | Industry sector | No |
+| `avg_volume` | float | Average daily volume | No |
+| `avg_trades` | int | Average daily trade count | No |
 
 ### Rating Format
 
@@ -107,9 +110,16 @@ High Yield (HY): `BB+` and below
 ### Example Data
 
 ```
-cusip,issuer,rating,maturity,coupon
-037833100,APPLE INC,AA+,2030-05-15,0.035
-594918104,MICROSOFT CORP,AAA,2028-11-01,0.040
+cusip,issuer,rating,maturity,coupon,sector,avg_volume,avg_trades
+037833100,APPLE INC,AA+,2030-05-15,0.035,Technology,5000,120
+594918104,MICROSOFT CORP,AAA,2028-11-01,0.040,Technology,8000,200
+```
+
+### Your Bloomberg Data (Before Mapping)
+
+```
+cusip,issuer,(composite)rating),maturity_date,coupon,industry_sector,avg_daily_volume,avg_daily_trade_count_isin
+037833100,APPLE INC,AA+,2030-05-15,0.035,Technology,5000,120
 ```
 
 ### Functions That Accept Custom Column Names
@@ -120,6 +130,7 @@ cusip,issuer,rating,maturity,coupon
 | `filter_hy()` | `rating_col` |
 | `filter_by_rating()` | `rating_col` |
 | `filter_by_liquidity()` | `volume_col`, `trades_col` |
+| `filter_by_sector()` | `sector_col` |
 | `enrich_with_reference()` | `on` (join column) |
 
 ---
@@ -171,6 +182,12 @@ column_map = {
     "PX_LAST": "price",
     "VOLUME": "volume",
     "SIDE": "side",
+    # Reference data
+    "(composite)rating)": "rating",
+    "maturity_date": "maturity",
+    "industry_sector": "sector",
+    "avg_daily_volume": "avg_volume",
+    "avg_daily_trade_count_isin": "avg_trades",
 }
 ```
 
