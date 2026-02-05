@@ -1,0 +1,5 @@
+[project]
+name = "signals"
+version = "0.1.0"
+description = "Signal implementations, extending the core library."
+dependencies = []
