@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Backtesting engine.
 
 This module provides the main backtesting logic that combines
@@ -140,27 +142,26 @@ def generate_trades(
     pd.DataFrame
         Trade log with columns: date, asset, side, size, price, pnl.
     """
-    trades = []
-
     position_changes = positions.diff()
 
-    for date in position_changes.index[1:]:
-        for asset in position_changes.columns:
-            change = position_changes.loc[date, asset]
-            if change != 0:
-                trade = {
-                    "date": date,
-                    "asset": asset,
-                    "side": "buy" if change > 0 else "sell",
-                    "size": abs(change),
-                    "price": prices.loc[date, asset] if asset in prices.columns else np.nan,
-                }
-                trades.append(trade)
+    # Stack to long format and filter non-zero changes (vectorized)
+    stacked = position_changes.iloc[1:].stack()
+    nonzero = stacked[stacked != 0]
 
-    if not trades:
+    if len(nonzero) == 0:
         return pd.DataFrame(columns=["date", "asset", "side", "size", "price"])
 
-    return pd.DataFrame(trades)
+    trades_df = nonzero.reset_index()
+    trades_df.columns = ["date", "asset", "change"]
+    trades_df["side"] = np.where(trades_df["change"] > 0, "buy", "sell")
+    trades_df["size"] = trades_df["change"].abs()
+
+    # Merge prices via stack for vectorized lookup
+    prices_long = prices.stack().reset_index()
+    prices_long.columns = ["date", "asset", "price"]
+    trades_df = trades_df.merge(prices_long, on=["date", "asset"], how="left")
+
+    return trades_df[["date", "asset", "side", "size", "price"]]
 
 
 def run_backtest(

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Credit-specific signal computations.
 
 This module provides credit-specific signals including:

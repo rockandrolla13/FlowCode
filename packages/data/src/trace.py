@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """TRACE data loading utilities.
 
 TRACE (Trade Reporting and Compliance Engine) is FINRA's system

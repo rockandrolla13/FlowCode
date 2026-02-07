@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Data validation utilities.
 
 This module provides functions to validate data quality
@@ -100,9 +102,11 @@ def validate_trace(
             stats=stats,
         )
 
-    # Validate CUSIP format
+    # Validate CUSIP format (vectorized)
     if "cusip" in df.columns:
-        invalid_cusips = df[~df["cusip"].apply(validate_cusip)]
+        cusip_str = df["cusip"].astype(str).str.upper()
+        valid_cusip_mask = (cusip_str.str.len() == 9) & cusip_str.str.match(r"^[A-Z0-9]{9}$")
+        invalid_cusips = df[~valid_cusip_mask.fillna(False)]
         stats["invalid_cusips"] = len(invalid_cusips)
         if len(invalid_cusips) > 0:
             warnings.append(f"Found {len(invalid_cusips)} invalid CUSIPs")
@@ -195,9 +199,11 @@ def validate_reference(
         if duplicates > 0:
             warnings.append(f"Found {duplicates} duplicate CUSIPs")
 
-    # Validate CUSIP format
+    # Validate CUSIP format (vectorized)
     if "cusip" in df.columns:
-        invalid_cusips = df[~df["cusip"].apply(validate_cusip)]
+        cusip_str = df["cusip"].astype(str).str.upper()
+        valid_cusip_mask = (cusip_str.str.len() == 9) & cusip_str.str.match(r"^[A-Z0-9]{9}$")
+        invalid_cusips = df[~valid_cusip_mask.fillna(False)]
         stats["invalid_cusips"] = len(invalid_cusips)
         if len(invalid_cusips) > 0:
             warnings.append(f"Found {len(invalid_cusips)} invalid CUSIPs")

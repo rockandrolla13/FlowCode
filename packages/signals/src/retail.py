@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Retail order imbalance signal.
 
 This module computes retail order imbalance from TRACE data
@@ -57,7 +59,10 @@ def is_subpenny(price: float) -> bool:
     False
     """
     # mod(price * 100, 1) > 0 means there's a fractional cent
-    return (price * 100) % 1 > 0
+    # Use round() to avoid IEEE 754 false positives (e.g. 100.10 * 100 = 10010.000000000002)
+    cents = round(price * 100, 6)
+    frac = cents % 1
+    return frac > 1e-9
 
 
 def is_retail_trade(
@@ -104,6 +109,25 @@ def is_retail_trade(
     return notional < notional_threshold and is_subpenny(price)
 
 
+def _is_subpenny_mask(prices: pd.Series) -> pd.Series:
+    """
+    Vectorized subpenny check for a Series of prices.
+
+    Parameters
+    ----------
+    prices : pd.Series
+        Trade execution prices.
+
+    Returns
+    -------
+    pd.Series
+        Boolean series, True where price has subpenny component.
+    """
+    cents = (prices * 100).round(6)
+    frac = cents % 1
+    return frac > 1e-9
+
+
 def classify_retail_trades(
     trades: pd.DataFrame,
     price_col: str = "price",
@@ -141,7 +165,7 @@ def classify_retail_trades(
     2    False
     dtype: bool
     """
-    has_subpenny = (trades[price_col] * 100) % 1 > 0
+    has_subpenny = _is_subpenny_mask(trades[price_col])
     below_threshold = trades[notional_col] < notional_threshold
     return has_subpenny & below_threshold
 

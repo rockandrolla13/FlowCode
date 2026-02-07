@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Signal triggers for trading decisions.
 
 This module provides trigger functions that convert continuous
@@ -68,7 +70,10 @@ def compute_zscore(
     rolling_mean = series.rolling(window=window, min_periods=min_periods).mean()
     rolling_std = series.rolling(window=window, min_periods=min_periods).std(ddof=ddof)
 
-    zscore = (series - rolling_mean) / rolling_std
+    # Mask zero std before division to avoid producing inf
+    safe_std = rolling_std.where(rolling_std != 0, np.nan)
+    zscore = (series - rolling_mean) / safe_std
+    # Safety net for inf from input data
     zscore = zscore.replace([np.inf, -np.inf], np.nan)
     zscore.name = "zscore"
 

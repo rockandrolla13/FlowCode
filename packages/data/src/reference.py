@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Bond reference data loading utilities.
 
 This module provides functions to load bond reference data

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Diagnostic metrics for signal analysis.
 
 This module provides functions for analyzing signal quality,

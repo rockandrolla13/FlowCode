@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Portfolio construction and position sizing.
 
 This module provides position sizing functions that convert
@@ -54,31 +56,16 @@ def equal_weight(
     if long_only:
         directions = directions.clip(lower=0)
 
-    positions = pd.DataFrame(
-        index=signal.index,
-        columns=signal.columns,
-        dtype=float,
-    )
+    # Rank by absolute signal for max_positions truncation
+    ranks = signal.abs().rank(axis=1, ascending=False, method="first")
+    mask = (ranks <= max_positions) & (directions != 0)
 
-    for date in signal.index:
-        row = directions.loc[date]
-        nonzero = row[row != 0]
+    # Zero out positions beyond max_positions
+    directions = directions.where(mask, 0)
 
-        if len(nonzero) == 0:
-            positions.loc[date] = 0
-            continue
-
-        # Limit to max positions (top by absolute signal)
-        if len(nonzero) > max_positions:
-            signal_row = signal.loc[date]
-            top_assets = signal_row.abs().nlargest(max_positions).index
-            nonzero = nonzero.loc[nonzero.index.isin(top_assets)]
-
-        # Equal weight
-        weight = 1.0 / len(nonzero)
-        positions.loc[date, nonzero.index] = nonzero * weight
-
-    positions = positions.fillna(0)
+    # Equal weight: divide direction by count of active positions per row
+    counts = mask.sum(axis=1).clip(lower=1)
+    positions = directions.div(counts, axis=0).fillna(0)
 
     return positions
 
@@ -123,7 +110,7 @@ def risk_parity(
     """
     # Compute rolling volatility
     returns = prices.pct_change()
-    volatility = returns.rolling(window=vol_window).std()
+    vol = returns.rolling(window=vol_window).std()
 
     # Get position directions
     directions = np.sign(signal)
@@ -131,45 +118,31 @@ def risk_parity(
     if long_only:
         directions = directions.clip(lower=0)
 
-    positions = pd.DataFrame(
-        index=signal.index,
-        columns=signal.columns,
-        dtype=float,
-    )
+    # Rank by absolute signal for max_positions truncation
+    ranks = signal.abs().rank(axis=1, ascending=False, method="first")
+    active_mask = (ranks <= max_positions) & (directions != 0)
 
-    for date in signal.index:
-        if date not in volatility.index:
-            positions.loc[date] = 0
-            continue
+    # Align volatility to signal index (dates not in vol get NaN → 0 positions)
+    vol_aligned = vol.reindex(signal.index)
 
-        row = directions.loc[date]
-        vol_row = volatility.loc[date]
+    # Inverse volatility weights (masked to active positions only)
+    inv_vol = (1.0 / vol_aligned).replace([np.inf, -np.inf], np.nan).fillna(0)
+    inv_vol = inv_vol.where(active_mask, 0)
 
-        nonzero = row[row != 0]
+    # Row-wise normalization
+    row_sums = inv_vol.sum(axis=1)
 
-        if len(nonzero) == 0:
-            positions.loc[date] = 0
-            continue
+    # Where inv_vol sums to 0, fall back to equal weight
+    has_vol = row_sums > 0
+    counts = active_mask.sum(axis=1).clip(lower=1)
 
-        # Limit to max positions
-        if len(nonzero) > max_positions:
-            signal_row = signal.loc[date]
-            top_assets = signal_row.abs().nlargest(max_positions).index
-            nonzero = nonzero.loc[nonzero.index.isin(top_assets)]
+    # Risk parity weights where volatility available
+    rp_weights = inv_vol.div(row_sums.clip(lower=1e-15), axis=0)
+    # Equal weights as fallback
+    eq_weights = active_mask.astype(float).div(counts, axis=0)
 
-        # Inverse volatility weights
-        inv_vol = 1.0 / vol_row.loc[nonzero.index]
-        inv_vol = inv_vol.replace([np.inf, -np.inf], np.nan).fillna(0)
-
-        if inv_vol.sum() == 0:
-            # Fall back to equal weight
-            weight = 1.0 / len(nonzero)
-            positions.loc[date, nonzero.index] = nonzero * weight
-        else:
-            weights = inv_vol / inv_vol.sum()
-            positions.loc[date, nonzero.index] = nonzero * weights
-
-    positions = positions.fillna(0)
+    weights = rp_weights.where(has_vol.values[:, np.newaxis], eq_weights)
+    positions = (directions.where(active_mask, 0) * weights).fillna(0)
 
     return positions
 

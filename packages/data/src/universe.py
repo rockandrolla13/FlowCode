@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Universe filtering utilities.
 
 This module provides functions to filter bonds by rating,

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Configuration loading utilities.
 
 This module provides functions to load YAML configuration files
