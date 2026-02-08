@@ -101,8 +101,8 @@ class TestValueAtRisk:
 
     def test_var_is_percentile(self) -> None:
         """Test VaR equals historical percentile."""
-        np.random.seed(42)
-        returns = pd.Series(np.random.randn(1000) * 0.01)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(1000) * 0.01)
 
         var_95 = value_at_risk(returns, confidence=0.95)
         expected = returns.quantile(0.05)
@@ -111,15 +111,15 @@ class TestValueAtRisk:
 
     def test_var_is_negative(self) -> None:
         """Test VaR is typically negative (represents loss)."""
-        np.random.seed(42)
-        returns = pd.Series(np.random.randn(1000) * 0.01)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(1000) * 0.01)
         var = value_at_risk(returns, confidence=0.95)
         assert var < 0
 
     def test_higher_confidence_more_extreme(self) -> None:
         """Test higher confidence gives more extreme VaR."""
-        np.random.seed(42)
-        returns = pd.Series(np.random.randn(1000) * 0.01)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(1000) * 0.01)
 
         var_95 = value_at_risk(returns, confidence=0.95)
         var_99 = value_at_risk(returns, confidence=0.99)
@@ -165,7 +165,8 @@ class TestVolatility:
 
     def test_annualization(self) -> None:
         """Test volatility is properly annualized."""
-        returns = pd.Series(np.random.randn(100) * 0.01)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(100) * 0.01)
 
         daily_std = returns.std()
         annualized = volatility(returns, periods_per_year=252)

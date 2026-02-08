@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Backtest result container.
 
 This module defines the BacktestResult dataclass that holds
@@ -41,15 +43,6 @@ class BacktestResult:
     trades: pd.DataFrame
     metrics: dict[str, float] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        """Validate result data."""
-        if self.returns is None:
-            self.returns = pd.Series(dtype=float)
-        if self.positions is None:
-            self.positions = pd.DataFrame()
-        if self.trades is None:
-            self.trades = pd.DataFrame()
 
     @property
     def total_return(self) -> float:

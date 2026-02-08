@@ -64,8 +64,8 @@ class TestSharpeRatio:
 
     def test_with_risk_free(self) -> None:
         """Test Sharpe with non-zero risk-free rate."""
-        returns = pd.Series([0.001] * 100 + [-0.001] * 100)
-        np.random.shuffle(returns.values)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.permutation([0.001] * 100 + [-0.001] * 100))
 
         sharpe_no_rf = sharpe_ratio(returns, risk_free=0.0)
         sharpe_with_rf = sharpe_ratio(returns, risk_free=0.0001)

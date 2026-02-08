@@ -68,7 +68,8 @@ class TestZscoreTrigger:
 
     def test_no_trigger_on_normal_value(self) -> None:
         """Test trigger doesn't fire on normal values."""
-        series = pd.Series(np.random.randn(100))
+        rng = np.random.default_rng(42)
+        series = pd.Series(rng.standard_normal(100))
 
         # With high threshold, should rarely trigger
         result = zscore_trigger(series, window=50, threshold=10.0, min_periods=50)

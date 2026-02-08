@@ -45,12 +45,28 @@ def validate_cusip(cusip: str) -> bool:
     if not isinstance(cusip, str):
         return False
 
-    if len(cusip) != 9:
-        return False
+    return bool(re.match(r"^[A-Z0-9]{9}$", cusip.upper()))
 
-    # Basic alphanumeric check (simplified)
-    pattern = r"^[A-Z0-9]{9}$"
-    return bool(re.match(pattern, cusip.upper()))
+
+def _validate_cusip_column(df: pd.DataFrame) -> tuple[int, str | None]:
+    """
+    Validate CUSIP column format (vectorized).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with a 'cusip' column.
+
+    Returns
+    -------
+    tuple[int, str | None]
+        Count of invalid CUSIPs and warning message (None if all valid).
+    """
+    cusip_str = df["cusip"].astype(str).str.upper()
+    valid_mask = (cusip_str.str.len() == 9) & cusip_str.str.match(r"^[A-Z0-9]{9}$")
+    n_invalid = int((~valid_mask.fillna(False)).sum())
+    warning = f"Found {n_invalid} invalid CUSIPs" if n_invalid > 0 else None
+    return n_invalid, warning
 
 
 def validate_trace(
@@ -104,12 +120,10 @@ def validate_trace(
 
     # Validate CUSIP format (vectorized)
     if "cusip" in df.columns:
-        cusip_str = df["cusip"].astype(str).str.upper()
-        valid_cusip_mask = (cusip_str.str.len() == 9) & cusip_str.str.match(r"^[A-Z0-9]{9}$")
-        invalid_cusips = df[~valid_cusip_mask.fillna(False)]
-        stats["invalid_cusips"] = len(invalid_cusips)
-        if len(invalid_cusips) > 0:
-            warnings.append(f"Found {len(invalid_cusips)} invalid CUSIPs")
+        n_invalid, cusip_warning = _validate_cusip_column(df)
+        stats["invalid_cusips"] = n_invalid
+        if cusip_warning:
+            warnings.append(cusip_warning)
 
     # Check for null values
     if required_columns:
@@ -192,21 +206,18 @@ def validate_reference(
             stats=stats,
         )
 
-    # Check for duplicate CUSIPs
     if "cusip" in df.columns:
+        # Check for duplicates
         duplicates = df["cusip"].duplicated().sum()
         stats["duplicate_cusips"] = duplicates
         if duplicates > 0:
             warnings.append(f"Found {duplicates} duplicate CUSIPs")
 
-    # Validate CUSIP format (vectorized)
-    if "cusip" in df.columns:
-        cusip_str = df["cusip"].astype(str).str.upper()
-        valid_cusip_mask = (cusip_str.str.len() == 9) & cusip_str.str.match(r"^[A-Z0-9]{9}$")
-        invalid_cusips = df[~valid_cusip_mask.fillna(False)]
-        stats["invalid_cusips"] = len(invalid_cusips)
-        if len(invalid_cusips) > 0:
-            warnings.append(f"Found {len(invalid_cusips)} invalid CUSIPs")
+        # Validate format (vectorized)
+        n_invalid, cusip_warning = _validate_cusip_column(df)
+        stats["invalid_cusips"] = n_invalid
+        if cusip_warning:
+            warnings.append(cusip_warning)
 
     # Check for null values in required columns
     for col in required_columns:

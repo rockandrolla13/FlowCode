@@ -7,7 +7,6 @@ liquidity, and other criteria to define investment universes.
 """
 
 import logging
-from typing import Literal
 
 import pandas as pd
 
@@ -42,13 +41,6 @@ RATING_ORDER = [
 # Investment grade threshold
 IG_THRESHOLD = "BBB-"
 
-
-def _rating_to_numeric(rating: str) -> int:
-    """Convert rating to numeric value (higher = better)."""
-    try:
-        return len(RATING_ORDER) - RATING_ORDER.index(rating)
-    except ValueError:
-        return -1  # Unknown rating
 
 
 def filter_ig(
@@ -166,7 +158,7 @@ def filter_by_rating(
     if rating_col not in df.columns:
         raise ValueError(f"Rating column '{rating_col}' not found in DataFrame")
 
-    mask = pd.Series([True] * len(df), index=df.index)
+    mask = pd.Series(True, index=df.index)
 
     if min_rating is not None:
         min_idx = RATING_ORDER.index(min_rating)
@@ -216,7 +208,7 @@ def filter_by_liquidity(
     pd.DataFrame
         Filtered DataFrame meeting liquidity criteria.
     """
-    mask = pd.Series([True] * len(df), index=df.index)
+    mask = pd.Series(True, index=df.index)
 
     if min_volume is not None and volume_col in df.columns:
         mask &= df[volume_col] >= min_volume

@@ -135,8 +135,8 @@ def aggregate_daily_volume(
     ['date', 'cusip', 'buy_volume', 'sell_volume', 'total_volume']
     """
     # Separate buys and sells
-    buys = trades[trades[side_col] == "B"].copy()
-    sells = trades[trades[side_col] == "S"].copy()
+    buys = trades[trades[side_col] == "B"]
+    sells = trades[trades[side_col] == "S"]
 
     # Aggregate by date and cusip
     buy_agg = (

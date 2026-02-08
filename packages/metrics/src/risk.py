@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Risk metrics.
 
 This module provides functions for computing risk metrics

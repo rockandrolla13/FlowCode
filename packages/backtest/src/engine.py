@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 def compute_returns(
     positions: pd.DataFrame,
     prices: pd.DataFrame,
-    price_col: str = "price",
 ) -> pd.Series:
     """
     Compute strategy returns from positions and prices.
@@ -38,8 +37,6 @@ def compute_returns(
         Position sizes indexed by date, columns are assets.
     prices : pd.DataFrame
         Price data with same structure as positions.
-    price_col : str
-        Column name for price if prices is multi-column per asset.
 
     Returns
     -------
@@ -52,20 +49,14 @@ def compute_returns(
     This ensures no lookahead bias.
     """
     # Compute asset returns
-    if isinstance(prices, pd.Series):
-        asset_returns = prices.pct_change()
-    else:
-        asset_returns = prices.pct_change()
+    asset_returns = prices.pct_change()
 
     # Align positions and returns
     # Position at t-1 earns return at t
     lagged_positions = positions.shift(1)
 
     # Strategy return = sum of (position * return) across assets
-    if isinstance(asset_returns, pd.Series):
-        strategy_returns = lagged_positions * asset_returns
-    else:
-        strategy_returns = (lagged_positions * asset_returns).sum(axis=1)
+    strategy_returns = (lagged_positions * asset_returns).sum(axis=1)
 
     strategy_returns = strategy_returns.fillna(0)
 
@@ -89,38 +80,26 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     if len(returns) < 2:
         return {}
 
-    # Import here to avoid circular dependency
-    # In real implementation, these would be imported at top
-    metrics = {}
+    # Sharpe ratio (matches metrics.performance.sharpe_ratio: ddof=1, annualized)
+    std = returns.std(ddof=1)
+    sharpe = float((returns.mean() / std) * np.sqrt(252)) if std > 0 else np.nan
 
-    # Basic stats
-    metrics["total_return"] = float((1 + returns).prod() - 1)
-    metrics["mean_return"] = float(returns.mean())
-    metrics["volatility"] = float(returns.std() * np.sqrt(252))
-
-    # Sharpe ratio
-    if returns.std() > 0:
-        metrics["sharpe_ratio"] = float(
-            returns.mean() / returns.std() * np.sqrt(252)
-        )
-    else:
-        metrics["sharpe_ratio"] = np.nan
-
-    # Drawdown
+    # Max drawdown (matches metrics.risk.max_drawdown)
     cum_returns = (1 + returns).cumprod()
     running_max = cum_returns.cummax()
     drawdown = (cum_returns - running_max) / running_max
-    metrics["max_drawdown"] = float(drawdown.min())
 
-    # Win rate
-    metrics["win_rate"] = float((returns > 0).mean())
-    metrics["loss_rate"] = float((returns < 0).mean())
-
-    # Skewness and kurtosis
-    metrics["skewness"] = float(returns.skew())
-    metrics["kurtosis"] = float(returns.kurtosis())
-
-    return metrics
+    return {
+        "total_return": float((1 + returns).prod() - 1),
+        "mean_return": float(returns.mean()),
+        "volatility": float(std * np.sqrt(252)),
+        "sharpe_ratio": sharpe,
+        "max_drawdown": float(drawdown.min()),
+        "win_rate": float((returns > 0).mean()),
+        "loss_rate": float((returns < 0).mean()),
+        "skewness": float(returns.skew()),
+        "kurtosis": float(returns.kurtosis()),
+    }
 
 
 def generate_trades(
@@ -140,7 +119,7 @@ def generate_trades(
     Returns
     -------
     pd.DataFrame
-        Trade log with columns: date, asset, side, size, price, pnl.
+        Trade log with columns: date, asset, side, size, price.
     """
     position_changes = positions.diff()
 
@@ -256,7 +235,7 @@ def run_backtest(
     config = {
         "transaction_cost": transaction_cost,
         "max_positions": max_positions,
-        "position_sizer": position_sizer.__name__ if position_sizer else "none",
+        "position_sizer": position_sizer.__name__,
     }
 
     result = BacktestResult(

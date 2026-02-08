@@ -175,26 +175,19 @@ def top_n_positions(
     pd.DataFrame
         Position weights (+1/n_long for longs, -1/n_short for shorts).
     """
-    positions = pd.DataFrame(
-        0.0,
-        index=signal.index,
-        columns=signal.columns,
+    valid = signal.notna()
+
+    # Rank descending for longs (highest signal = rank 1)
+    ranks_desc = signal.rank(axis=1, ascending=False, method="first", na_option="bottom")
+    # Rank ascending for shorts (lowest signal = rank 1)
+    ranks_asc = signal.rank(axis=1, ascending=True, method="first", na_option="bottom")
+
+    long_mask = (ranks_desc <= n_long) & valid & (n_long > 0)
+    short_mask = (ranks_asc <= n_short) & valid & (n_short > 0)
+
+    positions = (
+        long_mask.astype(float) / max(n_long, 1)
+        - short_mask.astype(float) / max(n_short, 1)
     )
-
-    for date in signal.index:
-        row = signal.loc[date].dropna()
-
-        if len(row) == 0:
-            continue
-
-        # Top N for long
-        if n_long > 0:
-            top = row.nlargest(min(n_long, len(row))).index
-            positions.loc[date, top] = 1.0 / n_long
-
-        # Bottom N for short
-        if n_short > 0:
-            bottom = row.nsmallest(min(n_short, len(row))).index
-            positions.loc[date, bottom] = -1.0 / n_short
 
     return positions

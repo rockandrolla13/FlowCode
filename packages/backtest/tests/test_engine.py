@@ -104,14 +104,15 @@ class TestRunBacktest:
 
     def test_basic_backtest(self) -> None:
         """Test basic backtest execution."""
+        rng = np.random.default_rng(42)
         dates = pd.date_range("2023-01-01", periods=10)
         signal = pd.DataFrame(
-            {"A": np.random.randn(10), "B": np.random.randn(10)},
+            {"A": rng.standard_normal(10), "B": rng.standard_normal(10)},
             index=dates,
         )
         prices = pd.DataFrame(
-            {"A": 100 * (1 + np.random.randn(10).cumsum() * 0.01),
-             "B": 100 * (1 + np.random.randn(10).cumsum() * 0.01)},
+            {"A": 100 * (1 + rng.standard_normal(10).cumsum() * 0.01),
+             "B": 100 * (1 + rng.standard_normal(10).cumsum() * 0.01)},
             index=dates,
         )
 

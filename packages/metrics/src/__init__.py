@@ -4,19 +4,16 @@ This package provides pure functions for computing performance
 and risk metrics. All functions are stateless with no side effects.
 
 Public API:
-- sharpe_ratio: Annualized Sharpe ratio
-- sortino_ratio: Annualized Sortino ratio (downside deviation)
-- calmar_ratio: Annualized return / max drawdown
-- max_drawdown: Maximum peak-to-trough drawdown
-- drawdown_series: Running drawdown series
-- value_at_risk: Historical VaR
-- hit_rate: Signal accuracy
-- autocorrelation: Series autocorrelation
+- sharpe_ratio, sortino_ratio, calmar_ratio, annualized_return, information_ratio
+- max_drawdown, drawdown_series, drawdown_duration, max_drawdown_duration
+- value_at_risk, expected_shortfall, volatility, downside_volatility
+- hit_rate, autocorrelation, autocorrelation_profile, signal_decay
+- information_coefficient, turnover, holding_period
 """
 
-from .performance import sharpe_ratio, sortino_ratio, calmar_ratio, annualized_return
-from .risk import max_drawdown, drawdown_series, value_at_risk, expected_shortfall
-from .diagnostics import hit_rate, autocorrelation, signal_decay, information_coefficient
+from .performance import sharpe_ratio, sortino_ratio, calmar_ratio, annualized_return, information_ratio
+from .risk import max_drawdown, drawdown_series, value_at_risk, expected_shortfall, volatility, downside_volatility, drawdown_duration, max_drawdown_duration
+from .diagnostics import hit_rate, autocorrelation, autocorrelation_profile, signal_decay, information_coefficient, turnover, holding_period
 
 __all__ = [
     # Performance
@@ -24,14 +21,22 @@ __all__ = [
     "sortino_ratio",
     "calmar_ratio",
     "annualized_return",
+    "information_ratio",
     # Risk
     "max_drawdown",
     "drawdown_series",
     "value_at_risk",
     "expected_shortfall",
+    "volatility",
+    "downside_volatility",
+    "drawdown_duration",
+    "max_drawdown_duration",
     # Diagnostics
     "hit_rate",
     "autocorrelation",
+    "autocorrelation_profile",
     "signal_decay",
     "information_coefficient",
+    "turnover",
+    "holding_period",
 ]

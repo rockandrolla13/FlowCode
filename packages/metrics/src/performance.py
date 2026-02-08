@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Performance metrics.
 
 This module provides functions for computing risk-adjusted
