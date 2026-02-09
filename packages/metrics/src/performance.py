@@ -48,10 +48,17 @@ def annualized_return(
     n_periods = len(returns)
     years = n_periods / periods_per_year
 
-    if total_return <= -1.0 or years <= 0:
+    if total_return <= -1.0:
         logger.warning(
             "annualized_return: total return <= -100%% (%.4f), returning NaN",
             total_return,
+        )
+        return np.nan
+
+    if years <= 0:
+        logger.warning(
+            "annualized_return: zero periods (years=%.4f), returning NaN",
+            years,
         )
         return np.nan
 

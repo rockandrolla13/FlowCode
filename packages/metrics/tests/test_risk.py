@@ -226,6 +226,16 @@ class TestExpectedShortfallFallback:
         assert es == pytest.approx(100.0)
 
 
+class TestVarUnknownMethod:
+    """Test VaR raises on unknown method."""
+
+    def test_unknown_method_raises(self) -> None:
+        """Test value_at_risk raises ValueError for unknown method."""
+        returns = pd.Series([0.01, -0.02, 0.03])
+        with pytest.raises(ValueError, match="Unknown VaR method"):
+            value_at_risk(returns, method="parametric")
+
+
 class TestDrawdownFixtures:
     """Fixture-backed tests for drawdown (spec §4.1)."""
 

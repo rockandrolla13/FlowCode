@@ -12,6 +12,7 @@ from src.performance import (
     sortino_ratio,
     calmar_ratio,
     annualized_return,
+    information_ratio,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "spec" / "fixtures"
@@ -66,9 +67,6 @@ class TestSharpeRatio:
 
     def test_zero_volatility(self) -> None:
         """Test Sharpe with zero volatility returns NaN."""
-        returns = pd.Series([0.001] * 100)  # All same value
-        # Technically this has zero std, but due to floating point...
-        # Let's use truly constant
         returns = pd.Series([0.0] * 100)
         result = sharpe_ratio(returns, periods_per_year=252)
         assert np.isnan(result)
@@ -137,6 +135,59 @@ class TestCalmarRatio:
         returns = pd.Series([0.01] * 100)
         result = calmar_ratio(returns)
         # Zero drawdown means division by zero
+        assert np.isnan(result)
+
+
+class TestSortinoEdgeCases:
+    """Edge case tests for sortino_ratio."""
+
+    def test_single_downside_return_nan(self) -> None:
+        """Test Sortino returns NaN with only 1 downside return."""
+        returns = pd.Series([0.01, -0.02, 0.01, 0.03, 0.02])
+        result = sortino_ratio(returns)
+        assert np.isnan(result)
+
+
+class TestCalmarEdgeCases:
+    """Edge case tests for calmar_ratio."""
+
+    def test_negative_calmar_for_losing_strategy(self) -> None:
+        """Test Calmar is negative for a losing strategy."""
+        returns = pd.Series([-0.01, -0.02, -0.01, -0.02, -0.01])
+        result = calmar_ratio(returns)
+        assert result < 0
+
+
+class TestInformationRatio:
+    """Tests for information_ratio function."""
+
+    def test_basic_information_ratio(self) -> None:
+        """Test basic IR with known excess returns."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(100) * 0.01 + 0.001)
+        benchmark = pd.Series(rng.standard_normal(100) * 0.01)
+        result = information_ratio(returns, benchmark)
+        assert np.isfinite(result)
+
+    def test_empty_returns_nan(self) -> None:
+        """Test IR returns NaN for empty series."""
+        returns = pd.Series(dtype=float)
+        benchmark = pd.Series(dtype=float)
+        result = information_ratio(returns, benchmark)
+        assert np.isnan(result)
+
+    def test_single_return_nan(self) -> None:
+        """Test IR returns NaN for single return."""
+        returns = pd.Series([0.01])
+        benchmark = pd.Series([0.005])
+        result = information_ratio(returns, benchmark)
+        assert np.isnan(result)
+
+    def test_zero_tracking_error_nan(self) -> None:
+        """Test IR returns NaN when tracking error is zero."""
+        returns = pd.Series([0.01, 0.02, 0.03])
+        benchmark = pd.Series([0.01, 0.02, 0.03])
+        result = information_ratio(returns, benchmark)
         assert np.isnan(result)
 
 

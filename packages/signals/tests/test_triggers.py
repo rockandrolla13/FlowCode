@@ -195,6 +195,17 @@ class TestTriggerEmptySeries:
         assert len(result) == 0
 
 
+class TestZscoreWarmup:
+    """Tests for z-score trigger warmup behavior."""
+
+    def test_warmup_returns_zero_not_nan(self) -> None:
+        """Test that warmup period values are 0, not NaN."""
+        series = pd.Series(range(10), dtype=float)
+        result = zscore_trigger(series, window=8, threshold=2.0, min_periods=8)
+        # First 7 values should be 0 (insufficient history, no trigger)
+        assert (result.iloc[:7] == 0).all()
+
+
 class TestZscoreFixtures:
     """Fixture-backed tests for z-score trigger (spec §2.1).
 
