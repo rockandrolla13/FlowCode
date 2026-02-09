@@ -141,7 +141,13 @@ def risk_parity(
     # Equal weights as fallback
     eq_weights = active_mask.astype(float).div(counts, axis=0)
 
-    weights = rp_weights.where(has_vol.values[:, np.newaxis], eq_weights)
+    # Broadcast row-level condition to full DataFrame shape
+    has_vol_mask = pd.DataFrame(
+        np.tile(has_vol.values[:, np.newaxis], (1, rp_weights.shape[1])),
+        index=rp_weights.index,
+        columns=rp_weights.columns,
+    )
+    weights = rp_weights.where(has_vol_mask, eq_weights)
     positions = (directions.where(active_mask, 0) * weights).fillna(0)
 
     return positions

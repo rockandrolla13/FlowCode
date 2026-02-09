@@ -1,5 +1,8 @@
 """Tests for risk metrics."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,6 +15,8 @@ from src.risk import (
     expected_shortfall,
     volatility,
 )
+
+FIXTURES_DIR = Path(__file__).resolve().parents[3] / "spec" / "fixtures"
 
 
 class TestDrawdownSeries:
@@ -97,35 +102,35 @@ class TestMaxDrawdownDuration:
 
 
 class TestValueAtRisk:
-    """Tests for value_at_risk function."""
+    """Tests for value_at_risk function (positive loss magnitude per spec §4.2)."""
 
-    def test_var_is_percentile(self) -> None:
-        """Test VaR equals historical percentile."""
+    def test_var_is_negated_percentile(self) -> None:
+        """Test VaR equals negated historical percentile."""
         rng = np.random.default_rng(42)
         returns = pd.Series(rng.standard_normal(1000) * 0.01)
 
         var_95 = value_at_risk(returns, confidence=0.95)
-        expected = returns.quantile(0.05)
+        expected = -returns.quantile(0.05)
 
         assert var_95 == pytest.approx(expected)
 
-    def test_var_is_negative(self) -> None:
-        """Test VaR is typically negative (represents loss)."""
+    def test_var_is_positive(self) -> None:
+        """Test VaR is positive (loss magnitude)."""
         rng = np.random.default_rng(42)
         returns = pd.Series(rng.standard_normal(1000) * 0.01)
         var = value_at_risk(returns, confidence=0.95)
-        assert var < 0
+        assert var > 0
 
-    def test_higher_confidence_more_extreme(self) -> None:
-        """Test higher confidence gives more extreme VaR."""
+    def test_higher_confidence_larger_var(self) -> None:
+        """Test higher confidence gives larger VaR."""
         rng = np.random.default_rng(42)
         returns = pd.Series(rng.standard_normal(1000) * 0.01)
 
         var_95 = value_at_risk(returns, confidence=0.95)
         var_99 = value_at_risk(returns, confidence=0.99)
 
-        # 99% VaR should be more negative (extreme)
-        assert var_99 < var_95
+        # 99% VaR should be larger (more extreme loss)
+        assert var_99 > var_95
 
     def test_empty_series(self) -> None:
         """Test empty series returns NaN."""
@@ -135,29 +140,29 @@ class TestValueAtRisk:
 
 
 class TestExpectedShortfall:
-    """Tests for expected_shortfall function."""
+    """Tests for expected_shortfall function (positive loss magnitude per spec §4.3)."""
 
-    def test_es_worse_than_var(self) -> None:
-        """Test ES is more extreme than VaR."""
+    def test_es_exceeds_var(self) -> None:
+        """Test ES >= VaR (both positive loss magnitudes)."""
         np.random.seed(42)
         returns = pd.Series(np.random.randn(1000) * 0.01)
 
         var = value_at_risk(returns, confidence=0.95)
         es = expected_shortfall(returns, confidence=0.95)
 
-        # ES should be <= VaR (more negative)
-        assert es <= var
+        # ES should be >= VaR (larger loss magnitude)
+        assert es >= var
 
-    def test_es_is_tail_average(self) -> None:
-        """Test ES equals average of tail losses."""
+    def test_es_is_negated_tail_average(self) -> None:
+        """Test ES equals negated average of tail losses."""
         returns = pd.Series([-0.05, -0.04, -0.03, -0.02, -0.01, 0.01, 0.02, 0.03, 0.04, 0.05])
 
         var = value_at_risk(returns, confidence=0.80)  # 20% tail
         es = expected_shortfall(returns, confidence=0.80)
 
-        # ES should be average of returns <= VaR
-        tail = returns[returns <= var]
-        assert es == pytest.approx(tail.mean())
+        # Tail is returns <= -VaR (the negative quantile)
+        tail = returns[returns <= -var]
+        assert es == pytest.approx(-tail.mean())
 
 
 class TestVolatility:
@@ -178,3 +183,110 @@ class TestVolatility:
         returns = pd.Series([0.01])
         result = volatility(returns)
         assert np.isnan(result)
+
+
+class TestDrawdownFixtures:
+    """Fixture-backed tests for drawdown (spec §4.1)."""
+
+    @pytest.fixture
+    def drawdown_cases(self):
+        with open(FIXTURES_DIR / "drawdown_cases.json") as f:
+            return json.load(f)
+
+    def test_all_drawdown_fixture_cases(self, drawdown_cases) -> None:
+        """Test max_drawdown against golden fixture cases."""
+        for case in drawdown_cases["cases"]:
+            returns = pd.Series(case["input"]["returns"])
+
+            if not case["input"]["returns"]:
+                result = max_drawdown(returns)
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+                continue
+
+            result = max_drawdown(returns)
+            if case["expected"] is None:
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+            else:
+                tol = case.get("tolerance", 0.001)
+                assert result == pytest.approx(case["expected"], abs=tol), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {result}"
+                )
+
+
+class TestVarFixtures:
+    """Fixture-backed tests for VaR (spec §4.2)."""
+
+    @pytest.fixture
+    def var_cases(self):
+        with open(FIXTURES_DIR / "var_cases.json") as f:
+            return json.load(f)
+
+    def test_all_var_fixture_cases(self, var_cases) -> None:
+        """Test value_at_risk against golden fixture cases."""
+        for case in var_cases["cases"]:
+            returns_data = case["input"]["returns"]
+            if not returns_data:
+                result = value_at_risk(pd.Series(dtype=float))
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+                continue
+
+            returns = pd.Series(returns_data)
+
+            if "expected" in case:
+                confidence = case["input"].get("confidence", 0.95)
+                result = value_at_risk(returns, confidence=confidence)
+                if case["expected"] is None:
+                    assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+                else:
+                    tol = case.get("tolerance", 0.001)
+                    assert result == pytest.approx(case["expected"], abs=tol), (
+                        f"Case '{case['name']}': expected {case['expected']}, got {result}"
+                    )
+
+            if "expected_low" in case:
+                var_low = value_at_risk(returns, confidence=case["input"]["confidence_low"])
+                var_high = value_at_risk(returns, confidence=case["input"]["confidence_high"])
+                tol = case.get("tolerance", 0.001)
+                assert var_low == pytest.approx(case["expected_low"], abs=tol), (
+                    f"Case '{case['name']}' low: expected {case['expected_low']}, got {var_low}"
+                )
+                assert var_high == pytest.approx(case["expected_high"], abs=tol), (
+                    f"Case '{case['name']}' high: expected {case['expected_high']}, got {var_high}"
+                )
+                assert var_high > var_low, (
+                    f"Case '{case['name']}': higher confidence VaR should be larger"
+                )
+
+
+class TestEsFixtures:
+    """Fixture-backed tests for Expected Shortfall (spec §4.3)."""
+
+    @pytest.fixture
+    def es_cases(self):
+        with open(FIXTURES_DIR / "es_cases.json") as f:
+            return json.load(f)
+
+    def test_all_es_fixture_cases(self, es_cases) -> None:
+        """Test expected_shortfall against golden fixture cases."""
+        for case in es_cases["cases"]:
+            returns_data = case["input"]["returns"]
+            if not returns_data:
+                result = expected_shortfall(pd.Series(dtype=float))
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+                continue
+
+            returns = pd.Series(returns_data)
+            confidence = case["input"].get("confidence", 0.95)
+            es = expected_shortfall(returns, confidence=confidence)
+            var = value_at_risk(returns, confidence=confidence)
+
+            # ES >= VaR always
+            assert es >= var, (
+                f"Case '{case['name']}': ES ({es}) should >= VaR ({var})"
+            )
+
+            if "expected" in case and case["expected"] is not None:
+                tol = case.get("tolerance", 0.001)
+                assert es == pytest.approx(case["expected"], abs=tol), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {es}"
+                )

@@ -76,21 +76,37 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     -------
     dict[str, float]
         Dictionary of metrics.
+
+    Notes
+    -----
+    Formulas match metrics.performance and metrics.risk packages exactly.
+    Cross-package imports are not possible due to shared ``src/`` namespace
+    (see P3 item in review). When namespace is fixed, replace inline
+    calculations with direct imports.
     """
     if len(returns) < 2:
         return {}
 
-    # Sharpe ratio (matches metrics.performance.sharpe_ratio: ddof=1, annualized)
+    # Sharpe ratio — spec §3.1: (μ - rf) / σ * √252, ddof=1
     std = returns.std(ddof=1)
     sharpe = float((returns.mean() / std) * np.sqrt(252)) if std > 0 else np.nan
 
-    # Max drawdown (matches metrics.risk.max_drawdown)
+    # Max drawdown — spec §4.1: (cum - peak) / peak
     cum_returns = (1 + returns).cumprod()
     running_max = cum_returns.cummax()
     drawdown = (cum_returns - running_max) / running_max
 
+    # Total return
+    total_return = float((1 + returns).prod() - 1)
+
+    # Annualized return — (1 + total)^(252/n) - 1
+    n_periods = len(returns)
+    years = n_periods / 252
+    ann_return = float((1 + total_return) ** (1 / years) - 1) if years > 0 else np.nan
+
     return {
-        "total_return": float((1 + returns).prod() - 1),
+        "total_return": total_return,
+        "annualized_return": ann_return,
         "mean_return": float(returns.mean()),
         "volatility": float(std * np.sqrt(252)),
         "sharpe_ratio": sharpe,

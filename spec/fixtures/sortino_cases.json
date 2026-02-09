@@ -1,0 +1,45 @@
+{
+  "description": "Test cases for Sortino ratio",
+  "spec_section": "§3.2",
+  "formula": "Sortino = (μ_r - r_f) / σ_d * √252, where σ_d = downside deviation",
+  "cases": [
+    {
+      "name": "positive_sortino",
+      "input": {
+        "returns": [0.01, 0.02, 0.01, 0.015, 0.005],
+        "risk_free_rate": 0.0
+      },
+      "expected": null,
+      "note": "All positive returns — fewer than 2 downside returns, returns NaN"
+    },
+    {
+      "name": "mixed_returns",
+      "input": {
+        "returns": [0.02, -0.01, 0.03, -0.02, 0.01],
+        "risk_free_rate": 0.0
+      },
+      "expected": 6.02,
+      "tolerance": 0.01,
+      "note": "μ=0.006, dd=sqrt(mean([0.01^2,0.02^2]))=0.01581, Sortino=0.006/0.01581*√252=6.02"
+    },
+    {
+      "name": "all_negative",
+      "input": {
+        "returns": [-0.01, -0.02, -0.01, -0.015, -0.005],
+        "risk_free_rate": 0.0
+      },
+      "expected": -14.61,
+      "tolerance": 0.01,
+      "note": "Negative Sortino"
+    },
+    {
+      "name": "insufficient_data",
+      "input": {
+        "returns": [0.01],
+        "risk_free_rate": 0.0
+      },
+      "expected": null,
+      "note": "Need at least 2 data points"
+    }
+  ]
+}

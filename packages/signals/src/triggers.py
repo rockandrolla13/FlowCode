@@ -7,11 +7,11 @@ signals into discrete trading signals.
 
 Z-Score Trigger (Spec §2.1):
     z_t = (I_t - mean(I, window)) / std(I, window)
-    trigger = |z_t| > threshold
+    signal = 1 if z_t > threshold, -1 if z_t < -threshold, 0 otherwise
 
 Streak Trigger (Spec §2.2):
     streak_t = consecutive same-sign count
-    trigger = streak_t >= min_streak
+    signal = sign(X_t) if |streak_t| >= min_streak, 0 otherwise
 """
 
 import logging
@@ -89,8 +89,10 @@ def zscore_trigger(
     """
     Generate mean-reversion trigger based on z-score.
 
-    Triggers when the absolute z-score exceeds the threshold,
-    indicating extreme deviation from the rolling mean.
+    Spec §2.1:
+        signal = 1  if Z_t > threshold
+               = -1 if Z_t < -threshold
+               = 0  otherwise
 
     Parameters
     ----------
@@ -106,12 +108,12 @@ def zscore_trigger(
     Returns
     -------
     pd.Series
-        Boolean series. True when |z| > threshold.
+        Ternary signal: 1 (positive extreme), -1 (negative extreme), 0 (no signal).
 
     Examples
     --------
     >>> trigger = zscore_trigger(imbalance, threshold=7.0)
-    >>> trigger.sum()
+    >>> (trigger != 0).sum()
     42  # 42 trigger events
 
     Notes
@@ -120,10 +122,14 @@ def zscore_trigger(
     In practice, lower thresholds (2-3) are more common.
     """
     zscore = compute_zscore(series, window=window, min_periods=min_periods)
-    trigger = np.abs(zscore) > threshold
+    trigger = pd.Series(
+        np.where(zscore > threshold, 1,
+                 np.where(zscore < -threshold, -1, 0)),
+        index=series.index,
+    )
     trigger.name = "zscore_trigger"
 
-    n_triggers = trigger.sum()
+    n_triggers = (trigger != 0).sum()
     logger.info(
         f"Z-score trigger (threshold={threshold}): {n_triggers} events "
         f"({100 * n_triggers / len(trigger):.2f}%)"
@@ -198,8 +204,9 @@ def streak_trigger(
     """
     Generate momentum trigger based on streak length.
 
-    Triggers when the series has maintained the same sign
-    for at least min_streak consecutive periods.
+    Spec §2.2:
+        signal = sign(X_t) if |streak_t| >= min_streak
+               = 0         otherwise
 
     Parameters
     ----------
@@ -213,12 +220,12 @@ def streak_trigger(
     Returns
     -------
     pd.Series
-        Boolean series. True when |streak| >= min_streak.
+        Ternary signal: 1 (positive momentum), -1 (negative momentum), 0 (no signal).
 
     Examples
     --------
     >>> trigger = streak_trigger(imbalance, min_streak=3)
-    >>> trigger.sum()
+    >>> (trigger != 0).sum()
     156  # 156 trigger events
 
     Notes
@@ -227,10 +234,14 @@ def streak_trigger(
     may predict continuation.
     """
     streak = compute_streak(series, reset_on_zero=reset_on_zero)
-    trigger = np.abs(streak) >= min_streak
+    trigger = pd.Series(
+        np.where(np.abs(streak) >= min_streak, np.sign(streak), 0),
+        index=series.index,
+        dtype=int,
+    )
     trigger.name = "streak_trigger"
 
-    n_triggers = trigger.sum()
+    n_triggers = (trigger != 0).sum()
     logger.info(
         f"Streak trigger (min_streak={min_streak}): {n_triggers} events "
         f"({100 * n_triggers / len(trigger):.2f}%)"

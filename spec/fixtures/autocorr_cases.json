@@ -1,0 +1,36 @@
+{
+  "description": "Test cases for autocorrelation",
+  "spec_section": "§5.2",
+  "formula": "AC(lag) = corr(series_t, series_{t-lag})",
+  "cases": [
+    {
+      "name": "trending_series",
+      "input": {
+        "series": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        "lag": 1
+      },
+      "expected": 1.0,
+      "tolerance": 0.001,
+      "note": "Perfect linear trend has autocorrelation = 1"
+    },
+    {
+      "name": "alternating_series",
+      "input": {
+        "series": [1, -1, 1, -1, 1, -1, 1, -1, 1, -1],
+        "lag": 1
+      },
+      "expected": -1.0,
+      "tolerance": 0.001,
+      "note": "Perfect alternation has autocorrelation = -1"
+    },
+    {
+      "name": "insufficient_data",
+      "input": {
+        "series": [1.0],
+        "lag": 1
+      },
+      "expected": null,
+      "note": "Need len > lag for autocorrelation"
+    }
+  ]
+}

@@ -172,7 +172,14 @@ All formulas live in `spec/SPEC.md`. Code must match spec. Tests verify parity.
 | Z-score | §2.1 | `signals.triggers.zscore_trigger()` | `fixtures/zscore_cases.json` |
 | Streak | §2.2 | `signals.triggers.streak_trigger()` | `fixtures/streak_cases.json` |
 | Sharpe Ratio | §3.1 | `metrics.performance.sharpe_ratio()` | `fixtures/sharpe_cases.json` |
+| Sortino Ratio | §3.2 | `metrics.performance.sortino_ratio()` | `fixtures/sortino_cases.json` |
+| Calmar Ratio | §3.3 | `metrics.performance.calmar_ratio()` | `fixtures/calmar_cases.json` |
 | Max Drawdown | §4.1 | `metrics.risk.max_drawdown()` | `fixtures/drawdown_cases.json` |
+| Value at Risk | §4.2 | `metrics.risk.value_at_risk()` | `fixtures/var_cases.json` |
+| Expected Shortfall | §4.3 | `metrics.risk.expected_shortfall()` | `fixtures/es_cases.json` |
+| Hit Rate | §5.1 | `metrics.diagnostics.hit_rate()` | `fixtures/hit_rate_cases.json` |
+| Autocorrelation | §5.2 | `metrics.diagnostics.autocorrelation()` | `fixtures/autocorr_cases.json` |
+| Information Coefficient | §5.3 | `metrics.diagnostics.information_coefficient()` | `fixtures/ic_cases.json` |
 
 ### Parity Check
 ```bash

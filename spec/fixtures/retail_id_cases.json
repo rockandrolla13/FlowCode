@@ -1,0 +1,49 @@
+{
+  "description": "Test cases for retail trade identification (BJZZ)",
+  "spec_section": "§1.4",
+  "formula": "Retail if: Notional < $200,000 AND mod(Price × 100, 1) > 0",
+  "cases": [
+    {
+      "name": "retail_subpenny_small",
+      "input": {"price": 100.501, "notional": 50000},
+      "expected": true,
+      "note": "Subpenny + small notional = retail"
+    },
+    {
+      "name": "institutional_no_subpenny",
+      "input": {"price": 100.50, "notional": 50000},
+      "expected": false,
+      "note": "No subpenny = not retail"
+    },
+    {
+      "name": "institutional_large_notional",
+      "input": {"price": 100.501, "notional": 500000},
+      "expected": false,
+      "note": "Large notional = not retail despite subpenny"
+    },
+    {
+      "name": "boundary_notional",
+      "input": {"price": 100.501, "notional": 200000},
+      "expected": false,
+      "note": "At threshold (not strictly less than) = not retail"
+    },
+    {
+      "name": "round_price",
+      "input": {"price": 100.00, "notional": 10000},
+      "expected": false,
+      "note": "Round dollar price = not retail"
+    },
+    {
+      "name": "penny_price",
+      "input": {"price": 100.01, "notional": 10000},
+      "expected": false,
+      "note": "Exact penny = not retail (no subpenny)"
+    },
+    {
+      "name": "subpenny_small_fraction",
+      "input": {"price": 100.009, "notional": 10000},
+      "expected": true,
+      "note": "Sub-cent fraction present"
+    }
+  ]
+}

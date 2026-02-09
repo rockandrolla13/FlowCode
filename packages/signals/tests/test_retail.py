@@ -1,5 +1,8 @@
 """Tests for retail signal module."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -15,35 +18,59 @@ from src.retail import (
     classify_retail_trades,
 )
 
+FIXTURES_DIR = Path(__file__).resolve().parents[3] / "spec" / "fixtures"
+
 
 class TestQmpClassify:
-    """Tests for qmp_classify function."""
+    """Tests for qmp_classify function (3-state per spec §1.5)."""
 
-    def test_buy_above_threshold(self) -> None:
-        """Test trade above threshold is classified as buy."""
+    def test_buy_above_upper_threshold(self) -> None:
+        """Test trade above upper threshold is classified as buy."""
         result = qmp_classify(price=100.5, mid=100.0, spread=1.0, threshold=0.1)
         assert result == "buy"
 
-    def test_sell_below_threshold(self) -> None:
-        """Test trade below threshold is classified as sell."""
+    def test_sell_below_lower_threshold(self) -> None:
+        """Test trade below lower threshold is classified as sell."""
         result = qmp_classify(price=99.5, mid=100.0, spread=1.0, threshold=0.1)
         assert result == "sell"
 
-    def test_at_threshold_is_sell(self) -> None:
-        """Test trade exactly at threshold is classified as sell."""
+    def test_neutral_at_midpoint(self) -> None:
+        """Test trade at midpoint is neutral."""
+        result = qmp_classify(price=100.0, mid=100.0, spread=1.0, threshold=0.1)
+        assert result == "neutral"
+
+    def test_neutral_at_upper_boundary(self) -> None:
+        """Test trade exactly at upper threshold is neutral (not strictly above)."""
         # price = mid + threshold * spread = 100 + 0.1 * 1 = 100.1
         result = qmp_classify(price=100.1, mid=100.0, spread=1.0, threshold=0.1)
-        assert result == "sell"
+        assert result == "neutral"
 
-    def test_just_above_threshold_is_buy(self) -> None:
-        """Test trade just above threshold is classified as buy."""
+    def test_neutral_at_lower_boundary(self) -> None:
+        """Test trade exactly at lower threshold is neutral."""
+        # price = mid - threshold * spread = 100 - 0.1 * 1 = 99.9
+        result = qmp_classify(price=99.9, mid=100.0, spread=1.0, threshold=0.1)
+        assert result == "neutral"
+
+    def test_just_above_upper_threshold_is_buy(self) -> None:
+        """Test trade just above upper threshold is classified as buy."""
         result = qmp_classify(price=100.11, mid=100.0, spread=1.0, threshold=0.1)
         assert result == "buy"
 
+    def test_just_below_lower_threshold_is_sell(self) -> None:
+        """Test trade just below lower threshold is classified as sell."""
+        result = qmp_classify(price=99.89, mid=100.0, spread=1.0, threshold=0.1)
+        assert result == "sell"
+
+    def test_neutral_within_band(self) -> None:
+        """Test trade within neutral band."""
+        result = qmp_classify(price=100.03, mid=100.0, spread=1.0, threshold=0.1)
+        assert result == "neutral"
+
     def test_custom_threshold(self) -> None:
         """Test with custom threshold."""
+        # upper = 100 + 0.5*1 = 100.5, lower = 100 - 0.5*1 = 99.5
         result = qmp_classify(price=100.3, mid=100.0, spread=1.0, threshold=0.5)
-        assert result == "sell"  # 100.3 < 100 + 0.5 * 1 = 100.5
+        assert result == "neutral"  # 100.3 is within [99.5, 100.5]
 
 
 class TestComputeRetailImbalance:
@@ -116,7 +143,11 @@ class TestComputeRetailImbalance:
 
         assert len(result) == 2
         # ABC: (100-100)/(100+100) = 0
+        abc_val = result.xs("ABC123456", level="cusip").iloc[0]
+        assert abc_val == pytest.approx(0.0, abs=1e-9)
         # XYZ: (300-100)/(300+100) = 0.5
+        xyz_val = result.xs("XYZ789012", level="cusip").iloc[0]
+        assert xyz_val == pytest.approx(0.5, abs=1e-9)
 
     def test_multiindex_output(self) -> None:
         """Test output has MultiIndex (date, cusip)."""
@@ -316,3 +347,69 @@ class TestClassifyTradesQmpWithExclusion:
             exclusion_high=0.70
         )
         assert result.iloc[0] == "sell"
+
+
+class TestQmpFixtures:
+    """Fixture-backed tests for QMP classification (spec §1.5)."""
+
+    @pytest.fixture
+    def qmp_cases(self):
+        with open(FIXTURES_DIR / "qmp_cases.json") as f:
+            return json.load(f)
+
+    def test_all_qmp_fixture_cases(self, qmp_cases) -> None:
+        """Test qmp_classify against all golden fixture cases."""
+        alpha = qmp_cases["params"]["alpha"]
+        for case in qmp_cases["cases"]:
+            inp = case["input"]
+            mid = (inp["bid"] + inp["ask"]) / 2
+            spread = inp["ask"] - inp["bid"]
+            result = qmp_classify(
+                price=inp["price"], mid=mid, spread=spread, threshold=alpha
+            )
+            expected = case["expected"].lower()
+            assert result == expected, (
+                f"Case '{case['name']}': expected {expected}, got {result}"
+            )
+
+
+class TestImbalanceFixtures:
+    """Fixture-backed tests for imbalance (spec §1.3)."""
+
+    @pytest.fixture
+    def imbalance_cases(self):
+        with open(FIXTURES_DIR / "imbalance_cases.json") as f:
+            return json.load(f)
+
+    def test_all_imbalance_fixture_cases(self, imbalance_cases) -> None:
+        """Test compute_imbalance_from_volumes against golden fixture cases."""
+        for case in imbalance_cases["cases"]:
+            inp = case["input"]
+            buy = pd.Series([inp["buy_volume"]])
+            sell = pd.Series([inp["sell_volume"]])
+            result = compute_imbalance_from_volumes(buy, sell)
+
+            if case["expected"] is None:
+                assert pd.isna(result.iloc[0]), f"Case '{case['name']}': expected NaN"
+            else:
+                assert result.iloc[0] == pytest.approx(case["expected"]), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {result.iloc[0]}"
+                )
+
+
+class TestRetailIdFixtures:
+    """Fixture-backed tests for retail identification (spec §1.4)."""
+
+    @pytest.fixture
+    def retail_id_cases(self):
+        with open(FIXTURES_DIR / "retail_id_cases.json") as f:
+            return json.load(f)
+
+    def test_all_retail_id_fixture_cases(self, retail_id_cases) -> None:
+        """Test is_retail_trade against golden fixture cases."""
+        for case in retail_id_cases["cases"]:
+            inp = case["input"]
+            result = is_retail_trade(price=inp["price"], notional=inp["notional"])
+            assert result == case["expected"], (
+                f"Case '{case['name']}': expected {case['expected']}, got {result}"
+            )

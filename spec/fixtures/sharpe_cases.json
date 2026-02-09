@@ -10,8 +10,9 @@
         "risk_free_rate": 0.0,
         "annualize": true
       },
-      "expected": 2.97,
-      "tolerance": 0.01
+      "expected": 33.41,
+      "tolerance": 0.01,
+      "note": "μ=0.012, σ=0.0057, Sharpe = 0.012/0.0057 * √252 = 33.41"
     },
     {
       "name": "negative_sharpe",
@@ -20,7 +21,7 @@
         "risk_free_rate": 0.0,
         "annualize": true
       },
-      "expected": -2.97,
+      "expected": -33.41,
       "tolerance": 0.01
     },
     {
@@ -30,6 +31,8 @@
         "risk_free_rate": 0.0001,
         "annualize": true
       },
+      "expected": 33.14,
+      "tolerance": 0.01,
       "note": "Sharpe slightly lower due to risk-free subtraction"
     },
     {
@@ -49,8 +52,9 @@
         "risk_free_rate": 0.0,
         "annualize": true
       },
-      "expected": 0.76,
-      "tolerance": 0.01
+      "expected": 4.59,
+      "tolerance": 0.01,
+      "note": "μ=0.006, σ=0.0207, Sharpe = 0.006/0.0207 * √252 = 4.59"
     },
     {
       "name": "insufficient_data",

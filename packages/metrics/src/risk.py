@@ -144,7 +144,10 @@ def value_at_risk(
     """
     Compute Value at Risk (VaR).
 
-    VaR is the maximum expected loss at a given confidence level.
+    Spec §4.2: VaR_α = -quantile(returns, α)
+
+    VaR is the maximum expected loss at a given confidence level,
+    expressed as a positive loss magnitude.
 
     Parameters
     ----------
@@ -158,23 +161,23 @@ def value_at_risk(
     Returns
     -------
     float
-        VaR (negative value representing loss).
+        VaR as positive loss magnitude.
 
     Examples
     --------
     >>> returns = pd.Series(np.random.randn(1000) * 0.01)
     >>> value_at_risk(returns, confidence=0.95)
-    -0.0165  # Approximately
+    0.0165  # Approximately
 
     Notes
     -----
-    95% VaR of -0.02 means: "We expect losses to exceed 2% only 5% of the time."
+    95% VaR of 0.02 means: "We expect losses to exceed 2% only 5% of the time."
     """
     if len(returns) == 0:
         return np.nan
 
     if method == "historical":
-        var = returns.quantile(1 - confidence)
+        var = -returns.quantile(1 - confidence)
     else:
         raise ValueError(f"Unknown VaR method: {method}")
 
@@ -188,7 +191,10 @@ def expected_shortfall(
     """
     Compute Expected Shortfall (Conditional VaR).
 
-    ES is the expected loss given that loss exceeds VaR.
+    Spec §4.3: ES_α = -mean(returns where returns ≤ -VaR_α)
+
+    ES is the expected loss given that loss exceeds VaR,
+    expressed as a positive loss magnitude.
 
     Parameters
     ----------
@@ -200,22 +206,23 @@ def expected_shortfall(
     Returns
     -------
     float
-        Expected shortfall (negative value).
+        Expected shortfall as positive loss magnitude (ES >= VaR).
 
     Notes
     -----
-    Also known as CVaR or Average VaR. ES >= VaR (in absolute terms).
+    Also known as CVaR or Average VaR. ES >= VaR.
     """
     if len(returns) == 0:
         return np.nan
 
     var = value_at_risk(returns, confidence)
-    tail_returns = returns[returns <= var]
+    # VaR is positive; tail is returns <= -VaR (the negative quantile)
+    tail_returns = returns[returns <= -var]
 
     if len(tail_returns) == 0:
         return var
 
-    return float(tail_returns.mean())
+    return float(-tail_returns.mean())
 
 
 def volatility(
