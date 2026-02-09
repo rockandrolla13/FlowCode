@@ -101,6 +101,7 @@ def sharpe_ratio(
     Sharpe = (mean(r) - rf) / std(r) * sqrt(periods_per_year)
     """
     if len(returns) < 2:
+        logger.warning("sharpe_ratio: fewer than 2 returns, returning NaN")
         return np.nan
 
     excess_returns = returns - risk_free
@@ -108,6 +109,7 @@ def sharpe_ratio(
     std = excess_returns.std(ddof=1)
 
     if std == 0 or np.isnan(std):
+        logger.warning("sharpe_ratio: zero or NaN volatility, returning NaN")
         return np.nan
 
     sharpe = (mean_excess / std) * np.sqrt(periods_per_year)
@@ -140,7 +142,8 @@ def sortino_ratio(
     Returns
     -------
     float
-        Annualized Sortino ratio.
+        Annualized Sortino ratio. NaN if fewer than 2 returns or
+        fewer than 2 downside observations.
 
     Notes
     -----
@@ -150,6 +153,7 @@ def sortino_ratio(
     target_return (not sample std). Requires >= 2 downside observations.
     """
     if len(returns) < 2:
+        logger.warning("sortino_ratio: fewer than 2 returns, returning NaN")
         return np.nan
 
     excess_returns = returns - risk_free
@@ -158,11 +162,13 @@ def sortino_ratio(
     # Downside deviation
     downside_returns = returns[returns < target_return]
     if len(downside_returns) < 2:
+        logger.warning("sortino_ratio: fewer than 2 downside returns, returning NaN")
         return np.nan
 
     downside_std = np.sqrt(((downside_returns - target_return) ** 2).mean())
 
     if downside_std == 0 or np.isnan(downside_std):
+        logger.warning("sortino_ratio: zero downside deviation, returning NaN")
         return np.nan
 
     sortino = (mean_excess / downside_std) * np.sqrt(periods_per_year)
@@ -200,6 +206,7 @@ def calmar_ratio(
     max_dd = compute_max_drawdown(returns)
 
     if max_dd == 0 or np.isnan(max_dd):
+        logger.warning("calmar_ratio: zero or NaN max drawdown, returning NaN")
         return np.nan
 
     calmar = ann_ret / abs(max_dd)
@@ -231,17 +238,20 @@ def information_ratio(
         Annualized Information Ratio.
     """
     if len(returns) < 2:
+        logger.warning("information_ratio: fewer than 2 returns, returning NaN")
         return np.nan
 
     # Align series
     aligned = pd.concat([returns, benchmark_returns], axis=1).dropna()
     if len(aligned) < 2:
+        logger.warning("information_ratio: fewer than 2 aligned periods, returning NaN")
         return np.nan
 
     excess = aligned.iloc[:, 0] - aligned.iloc[:, 1]
     tracking_error = excess.std(ddof=1)
 
     if tracking_error == 0 or np.isnan(tracking_error):
+        logger.warning("information_ratio: zero tracking error, returning NaN")
         return np.nan
 
     ir = (excess.mean() / tracking_error) * np.sqrt(periods_per_year)

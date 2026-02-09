@@ -148,7 +148,7 @@ def value_at_risk(
     """
     Compute Value at Risk (VaR).
 
-    Spec §4.2: VaR_α = -quantile(returns, α)
+    Spec §4.2: VaR_α = -quantile(returns, α) where α = 1 - confidence.
 
     VaR is the maximum expected loss at a given confidence level,
     expressed as a positive loss magnitude.
@@ -195,7 +195,9 @@ def expected_shortfall(
     """
     Compute Expected Shortfall (Conditional VaR).
 
-    Spec §4.3: ES_α = -mean(returns where returns ≤ -VaR_α)
+    Spec §4.3: ES_α = -mean(returns where returns ≤ -VaR_α),
+    where α = 1 - confidence. Since VaR_α is positive (loss magnitude),
+    -VaR_α recovers the original negative quantile for tail selection.
 
     ES is the expected loss given that loss exceeds VaR,
     expressed as a positive loss magnitude.
@@ -223,6 +225,8 @@ def expected_shortfall(
     # VaR is positive; tail is returns <= -VaR (the negative quantile)
     tail_returns = returns[returns <= -var]
 
+    # Defensive guard: with historical VaR the tail should never be empty
+    # (quantile comes from same data), but protects against future methods.
     if len(tail_returns) == 0:
         logger.warning(
             "expected_shortfall: no returns in tail at confidence=%.2f, "

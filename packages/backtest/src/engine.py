@@ -79,9 +79,9 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
 
     Notes
     -----
-    Formulas match metrics.performance and metrics.risk packages exactly.
-    Cross-package imports are not possible due to shared ``src/`` namespace.
-    When namespace is fixed, replace inline calculations with direct imports.
+    Sharpe and max drawdown formulas replicate the metrics packages for
+    the default case (rf=0). Cross-package imports are not possible due
+    to shared ``src/`` namespace.
     """
     if len(returns) < 2:
         logger.warning("compute_metrics: fewer than 2 return periods, returning empty metrics")
@@ -91,7 +91,7 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     std = returns.std(ddof=1)
     sharpe = float((returns.mean() / std) * np.sqrt(252)) if std > 0 else np.nan
 
-    # Max drawdown — spec §4.1: (cum - peak) / peak
+    # Max drawdown — spec §4.1: (Value - Peak) / Peak, always <= 0
     cum_returns = (1 + returns).cumprod()
     running_max = cum_returns.cummax()
     drawdown = (cum_returns - running_max) / running_max
@@ -99,7 +99,7 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     # Total return
     total_return = float((1 + returns).prod() - 1)
 
-    # Annualized return — (1 + total)^(252/n) - 1
+    # Annualized return — (1 + total)^(1/years) - 1, where years = n/252
     n_periods = len(returns)
     years = n_periods / 252
     if total_return <= -1.0:

@@ -107,8 +107,10 @@ def risk_parity(
     Notes
     -----
     Weight_i = (1 / vol_i) / sum(1 / vol_j) for all j in portfolio.
+    Final position = sign(signal_i) * Weight_i, preserving signal direction.
     Falls back to equal weight on dates where rolling volatility is
     unavailable (e.g., insufficient history or constant prices).
+    The first vol_window-1 dates always fall back (insufficient history).
     """
     # Compute rolling volatility
     returns = prices.pct_change()

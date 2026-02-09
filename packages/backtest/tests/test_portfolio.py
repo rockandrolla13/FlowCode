@@ -118,6 +118,17 @@ class TestRiskParity:
                     f"Row {i}: expected equal weights but got {active.values}"
                 )
 
+    def test_weights_sum_to_one(self, sample_signal, sample_prices) -> None:
+        """Test absolute weights sum to ~1 per row when vol is available."""
+        result = risk_parity(sample_signal, sample_prices, vol_window=3)
+        # Skip warmup rows where vol is unavailable (fallback to equal weight)
+        for i in range(3, len(result)):
+            abs_sum = result.iloc[i].abs().sum()
+            if abs_sum > 0:
+                assert abs_sum == pytest.approx(1.0, abs=0.05), (
+                    f"Row {i}: weights sum to {abs_sum}, expected ~1.0"
+                )
+
     def test_long_only(self, sample_signal, sample_prices) -> None:
         """Test long_only mode."""
         result = risk_parity(sample_signal, sample_prices, vol_window=3, long_only=True)

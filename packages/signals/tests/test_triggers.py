@@ -139,6 +139,24 @@ class TestComputeStreak:
         assert list(result) == expected
 
 
+class TestComputeStreakNoReset:
+    """Tests for compute_streak with reset_on_zero=False."""
+
+    def test_zero_continues_streak(self) -> None:
+        """Test zero continues previous sign's streak when reset_on_zero=False."""
+        series = pd.Series([1, 2, 0, 3, 4])
+        result = compute_streak(series, reset_on_zero=False)
+        # Zero continues positive streak: 1, 2, 3, 4, 5
+        assert list(result) == [1, 2, 3, 4, 5]
+
+    def test_negative_then_zero_continues(self) -> None:
+        """Test zero continues negative streak."""
+        series = pd.Series([-1, -2, 0, -3])
+        result = compute_streak(series, reset_on_zero=False)
+        # Zero continues negative streak: -1, -2, -3, -4
+        assert list(result) == [-1, -2, -3, -4]
+
+
 class TestStreakTrigger:
     """Tests for streak_trigger function (ternary per spec §2.2)."""
 
