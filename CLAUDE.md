@@ -216,7 +216,7 @@ Signal computations. Contains retail identification, credit metrics, and trigger
 - `compute_retail_imbalance(trades)` → Imbalance series
 - `is_retail_trade(price, notional)` → bool (BJZZ method)
 - `is_subpenny(price)` → bool (subpenny check)
-- `qmp_classify(price, mid, spread)` → 'buy' or 'sell'
+- `qmp_classify(price, mid, spread)` → 'buy', 'sell', or 'neutral'
 - `qmp_classify_with_exclusion(price, bid, ask)` → 'buy', 'sell', or 'neutral'
 
 **Credit (credit.py):**
@@ -224,8 +224,8 @@ Signal computations. Contains retail identification, credit metrics, and trigger
 - `range_position(spread_curr, avg, max, min)` → Range position series
 
 **Triggers (triggers.py):**
-- `zscore_trigger(series, window, threshold)` → Boolean trigger
-- `streak_trigger(series, min_streak)` → Boolean trigger
+- `zscore_trigger(series, window, threshold)` → Ternary signal (1, -1, 0)
+- `streak_trigger(series, min_streak)` → Ternary signal (1, -1, 0)
 
 ### Rules
 - All signals return `pd.Series` indexed by `(date, cusip)`

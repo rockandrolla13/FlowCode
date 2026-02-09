@@ -91,6 +91,27 @@ class TestComputeMetrics:
         assert metrics["total_return"] < 0
         assert metrics["max_drawdown"] < 0
 
+    def test_annualized_return_present(self) -> None:
+        """Test annualized_return is computed and correct."""
+        returns = pd.Series([0.10, -0.05, 0.03])
+        metrics = compute_metrics(returns)
+
+        assert "annualized_return" in metrics
+        # total_return = (1.10 * 0.95 * 1.03) - 1 = 0.0765
+        expected_total = (1.10 * 0.95 * 1.03) - 1
+        assert metrics["total_return"] == pytest.approx(expected_total, abs=1e-10)
+        # annualized = (1 + total)^(252/3) - 1
+        expected_ann = (1 + expected_total) ** (252 / 3) - 1
+        assert metrics["annualized_return"] == pytest.approx(expected_ann, rel=1e-6)
+
+    def test_annualized_return_total_loss(self) -> None:
+        """Test annualized_return is NaN for >= 100% loss."""
+        # total_return = (1-1.0) - 1 = -1.0 → NaN guarded
+        returns = pd.Series([-1.0, 0.0])
+        metrics = compute_metrics(returns)
+
+        assert np.isnan(metrics["annualized_return"])
+
     def test_insufficient_data(self) -> None:
         """Test metrics with insufficient data."""
         returns = pd.Series([0.01])

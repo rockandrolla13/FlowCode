@@ -10,6 +10,7 @@ import pytest
 from src.retail import (
     qmp_classify,
     qmp_classify_with_exclusion,
+    classify_trades_qmp,
     classify_trades_qmp_with_exclusion,
     compute_retail_imbalance,
     compute_imbalance_from_volumes,
@@ -71,6 +72,16 @@ class TestQmpClassify:
         # upper = 100 + 0.5*1 = 100.5, lower = 100 - 0.5*1 = 99.5
         result = qmp_classify(price=100.3, mid=100.0, spread=1.0, threshold=0.5)
         assert result == "neutral"  # 100.3 is within [99.5, 100.5]
+
+    def test_negative_spread_returns_neutral(self) -> None:
+        """Test that negative spread (crossed market) returns neutral."""
+        result = qmp_classify(price=100.5, mid=100.0, spread=-1.0, threshold=0.1)
+        assert result == "neutral"
+
+    def test_zero_spread_returns_neutral(self) -> None:
+        """Test that zero spread returns neutral."""
+        result = qmp_classify(price=100.5, mid=100.0, spread=0.0, threshold=0.1)
+        assert result == "neutral"
 
 
 class TestComputeRetailImbalance:
@@ -258,6 +269,51 @@ class TestClassifyRetailTrades:
         assert result.iloc[0] == True   # Subpenny + small
         assert result.iloc[1] == False  # No subpenny
         assert result.iloc[2] == False  # Too large
+
+
+class TestClassifyTradesQmp:
+    """Tests for classify_trades_qmp vectorized 3-state classification."""
+
+    def test_three_state_classification(self) -> None:
+        """Test vectorized QMP returns buy/sell/neutral correctly."""
+        trades = pd.DataFrame({
+            "price": [100.5, 99.5, 100.0, 100.11, 99.89],
+            "mid": [100.0, 100.0, 100.0, 100.0, 100.0],
+            "spread": [1.0, 1.0, 1.0, 1.0, 1.0],
+        })
+        result = classify_trades_qmp(trades, threshold=0.1)
+        assert result.iloc[0] == "buy"      # 100.5 > 100.1
+        assert result.iloc[1] == "sell"     # 99.5 < 99.9
+        assert result.iloc[2] == "neutral"  # 100.0 in [99.9, 100.1]
+        assert result.iloc[3] == "buy"      # 100.11 > 100.1
+        assert result.iloc[4] == "sell"     # 99.89 < 99.9
+
+    def test_boundary_values_are_neutral(self) -> None:
+        """Test that prices exactly at thresholds are neutral."""
+        trades = pd.DataFrame({
+            "price": [100.1, 99.9],
+            "mid": [100.0, 100.0],
+            "spread": [1.0, 1.0],
+        })
+        result = classify_trades_qmp(trades, threshold=0.1)
+        assert result.iloc[0] == "neutral"  # 100.1 == upper, not >
+        assert result.iloc[1] == "neutral"  # 99.9 == lower, not <
+
+    def test_matches_scalar_qmp_classify(self) -> None:
+        """Test vectorized results match scalar function."""
+        cases = [
+            (100.5, 100.0, 1.0),
+            (99.5, 100.0, 1.0),
+            (100.0, 100.0, 1.0),
+        ]
+        trades = pd.DataFrame(cases, columns=["price", "mid", "spread"])
+        vec_result = classify_trades_qmp(trades, threshold=0.1)
+        for i, (price, mid, spread) in enumerate(cases):
+            scalar_result = qmp_classify(price, mid, spread, threshold=0.1)
+            assert vec_result.iloc[i] == scalar_result, (
+                f"Mismatch at index {i}: vectorized={vec_result.iloc[i]}, "
+                f"scalar={scalar_result}"
+            )
 
 
 class TestQmpClassifyWithExclusion:

@@ -130,10 +130,13 @@ def zscore_trigger(
     trigger.name = "zscore_trigger"
 
     n_triggers = (trigger != 0).sum()
-    logger.info(
-        f"Z-score trigger (threshold={threshold}): {n_triggers} events "
-        f"({100 * n_triggers / len(trigger):.2f}%)"
-    )
+    if len(trigger) > 0:
+        logger.info(
+            f"Z-score trigger (threshold={threshold}): {n_triggers} events "
+            f"({100 * n_triggers / len(trigger):.2f}%)"
+        )
+    else:
+        logger.warning("zscore_trigger: empty input series")
 
     return trigger
 
@@ -242,9 +245,12 @@ def streak_trigger(
     trigger.name = "streak_trigger"
 
     n_triggers = (trigger != 0).sum()
-    logger.info(
-        f"Streak trigger (min_streak={min_streak}): {n_triggers} events "
-        f"({100 * n_triggers / len(trigger):.2f}%)"
-    )
+    if len(trigger) > 0:
+        logger.info(
+            f"Streak trigger (min_streak={min_streak}): {n_triggers} events "
+            f"({100 * n_triggers / len(trigger):.2f}%)"
+        )
+    else:
+        logger.warning("streak_trigger: empty input series")
 
     return trigger

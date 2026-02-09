@@ -8,9 +8,10 @@ using the Quote Midpoint (QMP) classification rule.
 Formula (Spec §1.3):
     I_t = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 
-QMP Classification (Lee-Ready):
-    Buy if price > midpoint
-    Sell if price < midpoint
+QMP Classification (Spec §1.5):
+    Buy if price > midpoint + (α × spread)
+    Sell if price < midpoint - (α × spread)
+    Neutral otherwise
     Exclude trades in 40-60% NBBO exclusion zone
 
 Retail Identification (BJZZ subpenny logic):
@@ -209,6 +210,8 @@ def qmp_classify(
     >>> qmp_classify(price=100.0, mid=100.0, spread=1.0, threshold=0.1)
     'neutral'
     """
+    if spread <= 0:
+        return "neutral"
     upper = mid + threshold * spread
     lower = mid - threshold * spread
     if price > upper:

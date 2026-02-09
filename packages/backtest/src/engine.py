@@ -85,6 +85,7 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     calculations with direct imports.
     """
     if len(returns) < 2:
+        logger.warning("compute_metrics: fewer than 2 return periods, returning empty metrics")
         return {}
 
     # Sharpe ratio — spec §3.1: (μ - rf) / σ * √252, ddof=1
@@ -102,7 +103,12 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     # Annualized return — (1 + total)^(252/n) - 1
     n_periods = len(returns)
     years = n_periods / 252
-    ann_return = float((1 + total_return) ** (1 / years) - 1) if years > 0 else np.nan
+    if total_return <= -1.0:
+        ann_return = np.nan
+    elif years > 0:
+        ann_return = float((1 + total_return) ** (1 / years) - 1)
+    else:
+        ann_return = np.nan
 
     return {
         "total_return": total_return,

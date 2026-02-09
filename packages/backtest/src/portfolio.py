@@ -134,6 +134,12 @@ def risk_parity(
 
     # Where inv_vol sums to 0, fall back to equal weight
     has_vol = row_sums > 0
+    n_fallback = int((~has_vol).sum())
+    if n_fallback > 0:
+        logger.warning(
+            "risk_parity: %d of %d dates fell back to equal weight "
+            "(zero inverse-volatility sums)", n_fallback, len(row_sums)
+        )
     counts = active_mask.sum(axis=1).clip(lower=1)
 
     # Risk parity weights where volatility available

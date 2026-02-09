@@ -6,8 +6,12 @@ This module provides functions for computing risk metrics
 like drawdown, VaR, and expected shortfall.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def drawdown_series(returns: pd.Series) -> pd.Series:
@@ -220,6 +224,10 @@ def expected_shortfall(
     tail_returns = returns[returns <= -var]
 
     if len(tail_returns) == 0:
+        logger.warning(
+            "expected_shortfall: no returns in tail at confidence=%.2f, "
+            "returning VaR as fallback", confidence
+        )
         return var
 
     return float(-tail_returns.mean())
@@ -280,7 +288,7 @@ def downside_volatility(
 
     downside = returns[returns < target]
     if len(downside) < 2:
-        return 0.0
+        return np.nan
 
     downside_std = np.sqrt(((downside - target) ** 2).mean())
     return float(downside_std * np.sqrt(periods_per_year))

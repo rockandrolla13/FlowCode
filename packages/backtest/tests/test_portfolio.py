@@ -101,6 +101,23 @@ class TestRiskParity:
                 if result.iloc[i][col] != 0 and sample_signal.iloc[i][col] != 0:
                     assert np.sign(result.iloc[i][col]) == np.sign(sample_signal.iloc[i][col])
 
+    def test_fallback_to_equal_weight_when_no_vol(self, sample_signal) -> None:
+        """Test risk_parity falls back to equal weight when vol is unavailable."""
+        # Constant prices → zero vol → should fall back to equal weight
+        dates = sample_signal.index
+        cols = sample_signal.columns
+        flat_prices = pd.DataFrame(
+            100.0, index=dates, columns=cols
+        )
+        result = risk_parity(sample_signal, flat_prices, vol_window=3)
+        # All active positions should have equal weight (fallback)
+        for i in range(len(result)):
+            active = result.iloc[i][result.iloc[i] != 0]
+            if len(active) > 0:
+                assert active.abs().std() < 1e-10, (
+                    f"Row {i}: expected equal weights but got {active.values}"
+                )
+
     def test_long_only(self, sample_signal, sample_prices) -> None:
         """Test long_only mode."""
         result = risk_parity(sample_signal, sample_prices, vol_window=3, long_only=True)
