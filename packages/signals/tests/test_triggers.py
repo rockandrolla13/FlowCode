@@ -179,6 +179,22 @@ class TestStreakTrigger:
         assert (result_2 != 0).sum() > (result_4 != 0).sum()
 
 
+class TestTriggerEmptySeries:
+    """Tests for trigger behavior with empty input series."""
+
+    def test_zscore_trigger_empty_series(self) -> None:
+        """Test zscore_trigger returns empty series for empty input."""
+        series = pd.Series(dtype=float)
+        result = zscore_trigger(series, window=10, threshold=2.0)
+        assert len(result) == 0
+
+    def test_streak_trigger_empty_series(self) -> None:
+        """Test streak_trigger returns empty series for empty input."""
+        series = pd.Series(dtype=float)
+        result = streak_trigger(series, min_streak=3)
+        assert len(result) == 0
+
+
 class TestZscoreFixtures:
     """Fixture-backed tests for z-score trigger (spec §2.1).
 

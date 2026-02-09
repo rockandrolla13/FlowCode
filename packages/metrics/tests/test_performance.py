@@ -40,6 +40,12 @@ class TestAnnualizedReturn:
         result = annualized_return(returns)
         assert np.isnan(result)
 
+    def test_total_loss_returns_nan(self) -> None:
+        """Test annualized return is NaN for >= 100% loss."""
+        returns = pd.Series([-1.0, 0.0])  # total_return = -1.0
+        result = annualized_return(returns)
+        assert np.isnan(result)
+
 
 class TestSharpeRatio:
     """Tests for sharpe_ratio function."""

@@ -8,8 +8,12 @@ performance metrics like Sharpe, Sortino, and Calmar ratios.
 All metrics are annualized by default assuming 252 trading days.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def annualized_return(
@@ -45,6 +49,10 @@ def annualized_return(
     years = n_periods / periods_per_year
 
     if total_return <= -1.0 or years <= 0:
+        logger.warning(
+            "annualized_return: total return <= -100%% (%.4f), returning NaN",
+            total_return,
+        )
         return np.nan
 
     annualized = (1 + total_return) ** (1 / years) - 1
@@ -129,9 +137,10 @@ def sortino_ratio(
 
     Notes
     -----
-    Sortino = (mean(r) - rf) / downside_std * sqrt(periods_per_year)
+    Sortino = (mean(r) - rf) / downside_deviation * sqrt(periods_per_year)
 
-    Downside std is computed only from returns below target_return.
+    Downside deviation is the root-mean-square of deviations below
+    target_return (not sample std). Requires >= 2 downside observations.
     """
     if len(returns) < 2:
         return np.nan

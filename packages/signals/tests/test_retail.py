@@ -417,6 +417,30 @@ class TestClassifyTradesQmpWithExclusion:
         assert result.iloc[0] == "sell"
 
 
+class TestClassifyTradesQmpWithExclusionSpread:
+    """Tests for classify_trades_qmp_with_exclusion zero/negative spread."""
+
+    def test_zero_spread_returns_neutral(self) -> None:
+        """Test vectorized exclusion classifier handles zero spread."""
+        trades = pd.DataFrame({
+            "price": [100.0, 100.5],
+            "bid": [100.0, 100.0],
+            "ask": [100.0, 100.0],  # zero spread
+        })
+        result = classify_trades_qmp_with_exclusion(trades)
+        assert (result == "neutral").all()
+
+    def test_negative_spread_returns_neutral(self) -> None:
+        """Test vectorized exclusion classifier handles negative spread."""
+        trades = pd.DataFrame({
+            "price": [100.0],
+            "bid": [101.0],
+            "ask": [100.0],  # crossed market
+        })
+        result = classify_trades_qmp_with_exclusion(trades)
+        assert result.iloc[0] == "neutral"
+
+
 class TestQmpFixtures:
     """Fixture-backed tests for QMP classification (spec §1.5)."""
 

@@ -281,7 +281,8 @@ def downside_volatility(
     Returns
     -------
     float
-        Annualized downside volatility.
+        Annualized downside volatility. NaN if fewer than 2
+        returns below target (insufficient data for downside deviation).
     """
     if len(returns) < 2:
         return np.nan

@@ -14,6 +14,7 @@ from src.risk import (
     value_at_risk,
     expected_shortfall,
     volatility,
+    downside_volatility,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "spec" / "fixtures"
@@ -183,6 +184,46 @@ class TestVolatility:
         returns = pd.Series([0.01])
         result = volatility(returns)
         assert np.isnan(result)
+
+
+class TestDownsideVolatility:
+    """Tests for downside_volatility function."""
+
+    def test_returns_nan_when_insufficient_downside(self) -> None:
+        """Test NaN when fewer than 2 returns below target."""
+        returns = pd.Series([0.01, 0.02, 0.03])  # all positive
+        result = downside_volatility(returns, target=0.0)
+        assert np.isnan(result)
+
+    def test_returns_nan_for_single_period(self) -> None:
+        """Test NaN for fewer than 2 total periods."""
+        returns = pd.Series([0.01])
+        result = downside_volatility(returns)
+        assert np.isnan(result)
+
+    def test_positive_for_downside_data(self) -> None:
+        """Test positive result when downside data exists."""
+        returns = pd.Series([0.01, -0.02, 0.01, -0.03, 0.02, -0.01])
+        result = downside_volatility(returns, target=0.0)
+        assert result > 0
+
+
+class TestExpectedShortfallFallback:
+    """Tests for expected_shortfall fallback behavior.
+
+    The tail is never empty with historical VaR (quantile comes from
+    the same data), so we mock VaR to exercise the defensive guard.
+    """
+
+    def test_fallback_to_var_when_tail_empty(self, monkeypatch) -> None:
+        """Test ES returns VaR when no returns fall in tail."""
+        import src.risk as risk_module
+
+        # Mock VaR to return a large value so -var is far below any return
+        monkeypatch.setattr(risk_module, "value_at_risk", lambda *a, **kw: 100.0)
+        returns = pd.Series([0.01, 0.02, 0.03])
+        es = expected_shortfall(returns, confidence=0.95)
+        assert es == pytest.approx(100.0)
 
 
 class TestDrawdownFixtures:
