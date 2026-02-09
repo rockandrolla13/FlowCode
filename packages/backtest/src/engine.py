@@ -80,15 +80,14 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     Notes
     -----
     Formulas match metrics.performance and metrics.risk packages exactly.
-    Cross-package imports are not possible due to shared ``src/`` namespace
-    (see P3 item in review). When namespace is fixed, replace inline
-    calculations with direct imports.
+    Cross-package imports are not possible due to shared ``src/`` namespace.
+    When namespace is fixed, replace inline calculations with direct imports.
     """
     if len(returns) < 2:
         logger.warning("compute_metrics: fewer than 2 return periods, returning empty metrics")
         return {}
 
-    # Sharpe ratio — spec §3.1: (μ - rf) / σ * √252, ddof=1
+    # Sharpe ratio — spec §3.1: μ / σ * √252, ddof=1 (rf=0 assumed)
     std = returns.std(ddof=1)
     sharpe = float((returns.mean() / std) * np.sqrt(252)) if std > 0 else np.nan
 

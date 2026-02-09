@@ -310,11 +310,13 @@ def classify_trades_qmp(
     pd.Series
         Series of 'buy', 'sell', or 'neutral' classifications.
     """
-    upper = trades[mid_col] + threshold * trades[spread_col]
-    lower = trades[mid_col] - threshold * trades[spread_col]
+    spread = trades[spread_col]
+    valid_spread = spread > 0
+    upper = trades[mid_col] + threshold * spread
+    lower = trades[mid_col] - threshold * spread
     conditions = [
-        trades[price_col] > upper,
-        trades[price_col] < lower,
+        valid_spread & (trades[price_col] > upper),
+        valid_spread & (trades[price_col] < lower),
     ]
     choices = ["buy", "sell"]
     return pd.Series(
@@ -371,10 +373,12 @@ def classify_trades_qmp_with_exclusion(
     dtype: object
     """
     spread = trades[ask_col] - trades[bid_col]
+    valid_spread = spread > 0
     price_position = (trades[price_col] - trades[bid_col]) / spread
 
-    # Handle zero spread
+    # Handle zero/negative spread — force neutral
     price_position = price_position.replace([np.inf, -np.inf], np.nan)
+    price_position = price_position.where(valid_spread, np.nan)
 
     conditions = [
         price_position > exclusion_high,

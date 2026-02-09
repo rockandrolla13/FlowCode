@@ -315,6 +315,18 @@ class TestClassifyTradesQmp:
                 f"scalar={scalar_result}"
             )
 
+    def test_negative_spread_returns_neutral(self) -> None:
+        """Test vectorized classify returns neutral for negative/zero spread."""
+        trades = pd.DataFrame({
+            "price": [100.5, 99.5, 100.5],
+            "mid": [100.0, 100.0, 100.0],
+            "spread": [-1.0, 0.0, 1.0],
+        })
+        result = classify_trades_qmp(trades, threshold=0.1)
+        assert result.iloc[0] == "neutral"  # negative spread → neutral
+        assert result.iloc[1] == "neutral"  # zero spread → neutral
+        assert result.iloc[2] == "buy"      # valid spread, 100.5 > 100.1
+
 
 class TestQmpClassifyWithExclusion:
     """Tests for qmp_classify_with_exclusion function."""

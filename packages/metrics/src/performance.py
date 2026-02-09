@@ -44,7 +44,7 @@ def annualized_return(
     n_periods = len(returns)
     years = n_periods / periods_per_year
 
-    if years <= 0:
+    if total_return <= -1.0 or years <= 0:
         return np.nan
 
     annualized = (1 + total_return) ** (1 / years) - 1

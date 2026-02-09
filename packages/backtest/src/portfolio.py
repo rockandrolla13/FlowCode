@@ -107,6 +107,8 @@ def risk_parity(
     Notes
     -----
     Weight_i = (1 / vol_i) / sum(1 / vol_j) for all j in portfolio.
+    Falls back to equal weight on dates where rolling volatility is
+    unavailable (e.g., insufficient history or constant prices).
     """
     # Compute rolling volatility
     returns = prices.pct_change()
