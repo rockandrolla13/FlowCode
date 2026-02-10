@@ -107,6 +107,10 @@ def risk_parity(
     Notes
     -----
     Weight_i = (1 / vol_i) / sum(1 / vol_j) for all j in portfolio.
+    Final position = sign(signal_i) * Weight_i, preserving signal direction.
+    Falls back to equal weight on dates where rolling volatility is
+    unavailable (e.g., insufficient history or constant prices).
+    The first vol_window-1 dates always fall back (insufficient history).
     """
     # Compute rolling volatility
     returns = prices.pct_change()
@@ -134,6 +138,12 @@ def risk_parity(
 
     # Where inv_vol sums to 0, fall back to equal weight
     has_vol = row_sums > 0
+    n_fallback = int((~has_vol).sum())
+    if n_fallback > 0:
+        logger.warning(
+            "risk_parity: %d of %d dates fell back to equal weight "
+            "(zero inverse-volatility sums)", n_fallback, len(row_sums)
+        )
     counts = active_mask.sum(axis=1).clip(lower=1)
 
     # Risk parity weights where volatility available
@@ -141,7 +151,13 @@ def risk_parity(
     # Equal weights as fallback
     eq_weights = active_mask.astype(float).div(counts, axis=0)
 
-    weights = rp_weights.where(has_vol.values[:, np.newaxis], eq_weights)
+    # Broadcast row-level condition to full DataFrame shape
+    has_vol_mask = pd.DataFrame(
+        np.tile(has_vol.values[:, np.newaxis], (1, rp_weights.shape[1])),
+        index=rp_weights.index,
+        columns=rp_weights.columns,
+    )
+    weights = rp_weights.where(has_vol_mask, eq_weights)
     positions = (directions.where(active_mask, 0) * weights).fillna(0)
 
     return positions

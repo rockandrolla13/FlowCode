@@ -172,7 +172,14 @@ All formulas live in `spec/SPEC.md`. Code must match spec. Tests verify parity.
 | Z-score | §2.1 | `signals.triggers.zscore_trigger()` | `fixtures/zscore_cases.json` |
 | Streak | §2.2 | `signals.triggers.streak_trigger()` | `fixtures/streak_cases.json` |
 | Sharpe Ratio | §3.1 | `metrics.performance.sharpe_ratio()` | `fixtures/sharpe_cases.json` |
+| Sortino Ratio | §3.2 | `metrics.performance.sortino_ratio()` | `fixtures/sortino_cases.json` |
+| Calmar Ratio | §3.3 | `metrics.performance.calmar_ratio()` | `fixtures/calmar_cases.json` |
 | Max Drawdown | §4.1 | `metrics.risk.max_drawdown()` | `fixtures/drawdown_cases.json` |
+| Value at Risk | §4.2 | `metrics.risk.value_at_risk()` | `fixtures/var_cases.json` |
+| Expected Shortfall | §4.3 | `metrics.risk.expected_shortfall()` | `fixtures/es_cases.json` |
+| Hit Rate | §5.1 | `metrics.diagnostics.hit_rate()` | `fixtures/hit_rate_cases.json` |
+| Autocorrelation | §5.2 | `metrics.diagnostics.autocorrelation()` | `fixtures/autocorr_cases.json` |
+| Information Coefficient | §5.3 | `metrics.diagnostics.information_coefficient()` | `fixtures/ic_cases.json` |
 
 ### Parity Check
 ```bash
@@ -209,7 +216,7 @@ Signal computations. Contains retail identification, credit metrics, and trigger
 - `compute_retail_imbalance(trades)` → Imbalance series
 - `is_retail_trade(price, notional)` → bool (BJZZ method)
 - `is_subpenny(price)` → bool (subpenny check)
-- `qmp_classify(price, mid, spread)` → 'buy' or 'sell'
+- `qmp_classify(price, mid, spread)` → 'buy', 'sell', or 'neutral'
 - `qmp_classify_with_exclusion(price, bid, ask)` → 'buy', 'sell', or 'neutral'
 
 **Credit (credit.py):**
@@ -217,8 +224,8 @@ Signal computations. Contains retail identification, credit metrics, and trigger
 - `range_position(spread_curr, avg, max, min)` → Range position series
 
 **Triggers (triggers.py):**
-- `zscore_trigger(series, window, threshold)` → Boolean trigger
-- `streak_trigger(series, min_streak)` → Boolean trigger
+- `zscore_trigger(series, window, threshold)` → Ternary signal (1, -1, 0)
+- `streak_trigger(series, min_streak)` → Ternary signal (1, -1, 0)
 
 ### Rules
 - All signals return `pd.Series` indexed by `(date, cusip)`

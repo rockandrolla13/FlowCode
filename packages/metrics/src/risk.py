@@ -6,8 +6,12 @@ This module provides functions for computing risk metrics
 like drawdown, VaR, and expected shortfall.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def drawdown_series(returns: pd.Series) -> pd.Series:
@@ -144,7 +148,10 @@ def value_at_risk(
     """
     Compute Value at Risk (VaR).
 
-    VaR is the maximum expected loss at a given confidence level.
+    Spec §4.2: VaR_α = -quantile(returns, α) where α = 1 - confidence.
+
+    VaR is the maximum expected loss at a given confidence level,
+    expressed as a positive loss magnitude.
 
     Parameters
     ----------
@@ -158,23 +165,23 @@ def value_at_risk(
     Returns
     -------
     float
-        VaR (negative value representing loss).
+        VaR as positive loss magnitude.
 
     Examples
     --------
     >>> returns = pd.Series(np.random.randn(1000) * 0.01)
     >>> value_at_risk(returns, confidence=0.95)
-    -0.0165  # Approximately
+    0.0165  # Approximately
 
     Notes
     -----
-    95% VaR of -0.02 means: "We expect losses to exceed 2% only 5% of the time."
+    95% VaR of 0.02 means: "We expect losses to exceed 2% only 5% of the time."
     """
     if len(returns) == 0:
         return np.nan
 
     if method == "historical":
-        var = returns.quantile(1 - confidence)
+        var = -returns.quantile(1 - confidence)
     else:
         raise ValueError(f"Unknown VaR method: {method}")
 
@@ -188,7 +195,12 @@ def expected_shortfall(
     """
     Compute Expected Shortfall (Conditional VaR).
 
-    ES is the expected loss given that loss exceeds VaR.
+    Spec §4.3: ES_α = -mean(returns where returns ≤ -VaR_α),
+    where α = 1 - confidence. Since VaR_α is positive (loss magnitude),
+    -VaR_α recovers the original negative quantile for tail selection.
+
+    ES is the expected loss given that loss exceeds VaR,
+    expressed as a positive loss magnitude.
 
     Parameters
     ----------
@@ -200,22 +212,29 @@ def expected_shortfall(
     Returns
     -------
     float
-        Expected shortfall (negative value).
+        Expected shortfall as positive loss magnitude (ES >= VaR).
 
     Notes
     -----
-    Also known as CVaR or Average VaR. ES >= VaR (in absolute terms).
+    Also known as CVaR or Average VaR. ES >= VaR.
     """
     if len(returns) == 0:
         return np.nan
 
     var = value_at_risk(returns, confidence)
-    tail_returns = returns[returns <= var]
+    # VaR is positive; tail is returns <= -VaR (the negative quantile)
+    tail_returns = returns[returns <= -var]
 
+    # Defensive guard: with historical VaR the tail should never be empty
+    # (quantile comes from same data), but protects against future methods.
     if len(tail_returns) == 0:
+        logger.warning(
+            "expected_shortfall: no returns in tail at confidence=%.2f, "
+            "returning VaR as fallback", confidence
+        )
         return var
 
-    return float(tail_returns.mean())
+    return float(-tail_returns.mean())
 
 
 def volatility(
@@ -266,14 +285,15 @@ def downside_volatility(
     Returns
     -------
     float
-        Annualized downside volatility.
+        Annualized downside volatility. NaN if fewer than 2
+        returns below target (insufficient data for downside deviation).
     """
     if len(returns) < 2:
         return np.nan
 
     downside = returns[returns < target]
     if len(downside) < 2:
-        return 0.0
+        return np.nan
 
     downside_std = np.sqrt(((downside - target) ** 2).mean())
     return float(downside_std * np.sqrt(periods_per_year))

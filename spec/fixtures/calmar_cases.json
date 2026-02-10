@@ -1,0 +1,40 @@
+{
+  "description": "Test cases for Calmar ratio",
+  "spec_section": "§3.3",
+  "formula": "Calmar = Annualized_Return / |Max_Drawdown|",
+  "cases": [
+    {
+      "name": "positive_calmar",
+      "input": {
+        "returns": [0.01, 0.02, -0.01, 0.015, 0.005]
+      },
+      "expected": 635.05,
+      "tolerance": 0.1,
+      "note": "Large annualized value due to small sample (5 periods → 252)"
+    },
+    {
+      "name": "no_drawdown",
+      "input": {
+        "returns": [0.01, 0.02, 0.03]
+      },
+      "expected": null,
+      "note": "Zero drawdown makes Calmar undefined (NaN or inf)"
+    },
+    {
+      "name": "negative_return",
+      "input": {
+        "returns": [-0.05, -0.03, 0.01]
+      },
+      "expected": -33.25,
+      "tolerance": 0.1,
+      "note": "Negative Calmar when total return is negative"
+    },
+    {
+      "name": "insufficient_data",
+      "input": {
+        "returns": [0.01]
+      },
+      "expected": null
+    }
+  ]
+}

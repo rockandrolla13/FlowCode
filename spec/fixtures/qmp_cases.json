@@ -1,6 +1,6 @@
 {
   "description": "Test cases for QMP trade classification",
-  "spec_section": "§1.2",
+  "spec_section": "§1.5",
   "formula": "BUY if Price > Mid + α×Spread, SELL if Price < Mid - α×Spread, else NEUTRAL",
   "params": {"alpha": 0.1},
   "cases": [

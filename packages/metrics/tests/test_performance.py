@@ -1,5 +1,8 @@
 """Tests for performance metrics."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,7 +12,10 @@ from src.performance import (
     sortino_ratio,
     calmar_ratio,
     annualized_return,
+    information_ratio,
 )
+
+FIXTURES_DIR = Path(__file__).resolve().parents[3] / "spec" / "fixtures"
 
 
 class TestAnnualizedReturn:
@@ -35,6 +41,12 @@ class TestAnnualizedReturn:
         result = annualized_return(returns)
         assert np.isnan(result)
 
+    def test_total_loss_returns_nan(self) -> None:
+        """Test annualized return is NaN for >= 100% loss."""
+        returns = pd.Series([-1.0, 0.0])  # total_return = -1.0
+        result = annualized_return(returns)
+        assert np.isnan(result)
+
 
 class TestSharpeRatio:
     """Tests for sharpe_ratio function."""
@@ -55,9 +67,6 @@ class TestSharpeRatio:
 
     def test_zero_volatility(self) -> None:
         """Test Sharpe with zero volatility returns NaN."""
-        returns = pd.Series([0.001] * 100)  # All same value
-        # Technically this has zero std, but due to floating point...
-        # Let's use truly constant
         returns = pd.Series([0.0] * 100)
         result = sharpe_ratio(returns, periods_per_year=252)
         assert np.isnan(result)
@@ -106,8 +115,8 @@ class TestSortinoRatio:
         sortino = sortino_ratio(returns)
 
         # Both should be negative (losing strategy)
-        # Sortino should differ from Sharpe
-        assert sharpe != sortino
+        # Sortino should differ from Sharpe for asymmetric returns
+        assert abs(sharpe - sortino) > 0.001
 
 
 class TestCalmarRatio:
@@ -127,3 +136,138 @@ class TestCalmarRatio:
         result = calmar_ratio(returns)
         # Zero drawdown means division by zero
         assert np.isnan(result)
+
+
+class TestSortinoEdgeCases:
+    """Edge case tests for sortino_ratio."""
+
+    def test_single_downside_return_nan(self) -> None:
+        """Test Sortino returns NaN with only 1 downside return."""
+        returns = pd.Series([0.01, -0.02, 0.01, 0.03, 0.02])
+        result = sortino_ratio(returns)
+        assert np.isnan(result)
+
+
+class TestCalmarEdgeCases:
+    """Edge case tests for calmar_ratio."""
+
+    def test_negative_calmar_for_losing_strategy(self) -> None:
+        """Test Calmar is negative for a losing strategy."""
+        returns = pd.Series([-0.01, -0.02, -0.01, -0.02, -0.01])
+        result = calmar_ratio(returns)
+        assert result < 0
+
+
+class TestInformationRatio:
+    """Tests for information_ratio function."""
+
+    def test_basic_information_ratio(self) -> None:
+        """Test basic IR with known excess returns."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(100) * 0.01 + 0.001)
+        benchmark = pd.Series(rng.standard_normal(100) * 0.01)
+        result = information_ratio(returns, benchmark)
+        assert np.isfinite(result)
+
+    def test_empty_returns_nan(self) -> None:
+        """Test IR returns NaN for empty series."""
+        returns = pd.Series(dtype=float)
+        benchmark = pd.Series(dtype=float)
+        result = information_ratio(returns, benchmark)
+        assert np.isnan(result)
+
+    def test_single_return_nan(self) -> None:
+        """Test IR returns NaN for single return."""
+        returns = pd.Series([0.01])
+        benchmark = pd.Series([0.005])
+        result = information_ratio(returns, benchmark)
+        assert np.isnan(result)
+
+    def test_zero_tracking_error_nan(self) -> None:
+        """Test IR returns NaN when tracking error is zero."""
+        returns = pd.Series([0.01, 0.02, 0.03])
+        benchmark = pd.Series([0.01, 0.02, 0.03])
+        result = information_ratio(returns, benchmark)
+        assert np.isnan(result)
+
+
+class TestSharpeFixtures:
+    """Fixture-backed tests for Sharpe ratio (spec §3.1)."""
+
+    @pytest.fixture
+    def sharpe_cases(self):
+        with open(FIXTURES_DIR / "sharpe_cases.json") as f:
+            return json.load(f)
+
+    def test_all_sharpe_fixture_cases(self, sharpe_cases) -> None:
+        """Test sharpe_ratio against golden fixture cases."""
+        for case in sharpe_cases["cases"]:
+            if "expected" not in case:
+                continue  # Skip cases without expected values (note-only)
+
+            returns = pd.Series(case["input"]["returns"])
+            rf = case["input"].get("risk_free_rate", 0.0)
+
+            result = sharpe_ratio(returns, risk_free=rf)
+
+            if case["expected"] is None:
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+            else:
+                tol = case.get("tolerance", 0.01)
+                assert result == pytest.approx(case["expected"], abs=tol), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {result}"
+                )
+
+
+class TestSortinoFixtures:
+    """Fixture-backed tests for Sortino ratio (spec §3.2)."""
+
+    @pytest.fixture
+    def sortino_cases(self):
+        with open(FIXTURES_DIR / "sortino_cases.json") as f:
+            return json.load(f)
+
+    def test_all_sortino_fixture_cases(self, sortino_cases) -> None:
+        """Test sortino_ratio against golden fixture cases."""
+        for case in sortino_cases["cases"]:
+            if "expected" not in case:
+                continue
+
+            returns = pd.Series(case["input"]["returns"])
+            rf = case["input"].get("risk_free_rate", 0.0)
+
+            result = sortino_ratio(returns, risk_free=rf)
+
+            if case["expected"] is None:
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+            else:
+                tol = case.get("tolerance", 0.01)
+                assert result == pytest.approx(case["expected"], abs=tol), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {result}"
+                )
+
+
+class TestCalmarFixtures:
+    """Fixture-backed tests for Calmar ratio (spec §3.3)."""
+
+    @pytest.fixture
+    def calmar_cases(self):
+        with open(FIXTURES_DIR / "calmar_cases.json") as f:
+            return json.load(f)
+
+    def test_all_calmar_fixture_cases(self, calmar_cases) -> None:
+        """Test calmar_ratio against golden fixture cases."""
+        for case in calmar_cases["cases"]:
+            if "expected" not in case:
+                continue
+
+            returns = pd.Series(case["input"]["returns"])
+            result = calmar_ratio(returns)
+
+            if case["expected"] is None:
+                assert np.isnan(result), f"Case '{case['name']}': expected NaN"
+            else:
+                tol = case.get("tolerance", 0.1)
+                assert result == pytest.approx(case["expected"], abs=tol), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {result}"
+                )

@@ -1,0 +1,42 @@
+{
+  "description": "Test cases for range position calculation",
+  "spec_section": "§1.2",
+  "formula": "RangePos = (Spread_curr - Spread_avg) / (Spread_max - Spread_min)",
+  "cases": [
+    {
+      "name": "at_average",
+      "input": {"spread_curr": 100, "spread_avg": 100, "spread_max": 150, "spread_min": 50},
+      "expected": 0.0,
+      "note": "At average = 0"
+    },
+    {
+      "name": "wider_than_average",
+      "input": {"spread_curr": 125, "spread_avg": 100, "spread_max": 150, "spread_min": 50},
+      "expected": 0.25,
+      "note": "(125-100)/(150-50) = 25/100 = 0.25"
+    },
+    {
+      "name": "tighter_than_average",
+      "input": {"spread_curr": 75, "spread_avg": 100, "spread_max": 150, "spread_min": 50},
+      "expected": -0.25,
+      "note": "(75-100)/(150-50) = -25/100 = -0.25"
+    },
+    {
+      "name": "at_max",
+      "input": {"spread_curr": 150, "spread_avg": 100, "spread_max": 150, "spread_min": 50},
+      "expected": 0.5
+    },
+    {
+      "name": "beyond_range",
+      "input": {"spread_curr": 200, "spread_avg": 100, "spread_max": 150, "spread_min": 50},
+      "expected": 1.0,
+      "note": "Can exceed [-1,1] if outside historical range"
+    },
+    {
+      "name": "zero_range",
+      "input": {"spread_curr": 100, "spread_avg": 100, "spread_max": 100, "spread_min": 100},
+      "expected": null,
+      "note": "Zero denominator returns NaN"
+    }
+  ]
+}

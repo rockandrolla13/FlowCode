@@ -5,12 +5,13 @@ from __future__ import annotations
 This module computes retail order imbalance from TRACE data
 using the Quote Midpoint (QMP) classification rule.
 
-Formula (Spec §1.2):
+Formula (Spec §1.3):
     I_t = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 
-QMP Classification (Lee-Ready):
-    Buy if price > midpoint
-    Sell if price < midpoint
+QMP Classification (Spec §1.5):
+    Buy if price > midpoint + (α × spread)
+    Sell if price < midpoint - (α × spread)
+    Neutral otherwise
     Exclude trades in 40-60% NBBO exclusion zone
 
 Retail Identification (BJZZ subpenny logic):
@@ -175,12 +176,14 @@ def qmp_classify(
     mid: float,
     spread: float,
     threshold: float = 0.1,
-) -> Literal["buy", "sell"]:
+) -> Literal["buy", "sell", "neutral"]:
     """
     Classify trade direction using Quote Midpoint (QMP) rule.
 
-    The QMP rule classifies a trade as a buy if the execution price
-    is above the midpoint plus a fraction of the spread.
+    Spec §1.5:
+        BUY    if Price > Midpoint + (α × Spread)
+        SELL   if Price < Midpoint - (α × Spread)
+        NEUTRAL otherwise
 
     Parameters
     ----------
@@ -191,11 +194,11 @@ def qmp_classify(
     spread : float
         Bid-ask spread (ask - bid).
     threshold : float, default 0.1
-        Fraction of spread above midpoint for buy classification.
+        Fraction of spread for neutral band (α).
 
     Returns
     -------
-    Literal["buy", "sell"]
+    Literal["buy", "sell", "neutral"]
         Trade direction classification.
 
     Examples
@@ -204,14 +207,19 @@ def qmp_classify(
     'buy'
     >>> qmp_classify(price=99.5, mid=100.0, spread=1.0, threshold=0.1)
     'sell'
-
-    Notes
-    -----
-    This implements a simplified QMP rule. The threshold of 0.1 means
-    trades are classified as buys if price > mid + 0.1 * spread.
+    >>> qmp_classify(price=100.0, mid=100.0, spread=1.0, threshold=0.1)
+    'neutral'
     """
-    cutoff = mid + threshold * spread
-    return "buy" if price > cutoff else "sell"
+    if spread <= 0:
+        return "neutral"
+    upper = mid + threshold * spread
+    lower = mid - threshold * spread
+    if price > upper:
+        return "buy"
+    elif price < lower:
+        return "sell"
+    else:
+        return "neutral"
 
 
 def qmp_classify_with_exclusion(
@@ -300,11 +308,19 @@ def classify_trades_qmp(
     Returns
     -------
     pd.Series
-        Series of 'buy' or 'sell' classifications.
+        Series of 'buy', 'sell', or 'neutral' classifications.
     """
-    cutoff = trades[mid_col] + threshold * trades[spread_col]
+    spread = trades[spread_col]
+    valid_spread = spread > 0
+    upper = trades[mid_col] + threshold * spread
+    lower = trades[mid_col] - threshold * spread
+    conditions = [
+        valid_spread & (trades[price_col] > upper),
+        valid_spread & (trades[price_col] < lower),
+    ]
+    choices = ["buy", "sell"]
     return pd.Series(
-        np.where(trades[price_col] > cutoff, "buy", "sell"),
+        np.select(conditions, choices, default="neutral"),
         index=trades.index,
     )
 
@@ -357,10 +373,12 @@ def classify_trades_qmp_with_exclusion(
     dtype: object
     """
     spread = trades[ask_col] - trades[bid_col]
+    valid_spread = spread > 0
     price_position = (trades[price_col] - trades[bid_col]) / spread
 
-    # Handle zero spread
+    # Handle zero/negative spread — force neutral
     price_position = price_position.replace([np.inf, -np.inf], np.nan)
+    price_position = price_position.where(valid_spread, np.nan)
 
     conditions = [
         price_position > exclusion_high,

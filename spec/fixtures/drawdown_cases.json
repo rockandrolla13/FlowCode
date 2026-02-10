@@ -1,0 +1,40 @@
+{
+  "description": "Test cases for maximum drawdown",
+  "spec_section": "§4.1",
+  "formula": "Drawdown_t = (Cum_t - Peak_t) / Peak_t; Max_Drawdown = min(Drawdown_t)",
+  "note": "Returns negative value (e.g., -0.15 = 15% drawdown)",
+  "cases": [
+    {
+      "name": "simple_drawdown",
+      "input": {"returns": [0.10, -0.20, 0.05]},
+      "expected": -0.2,
+      "tolerance": 0.001,
+      "note": "Wealth: 1.10, 0.88, 0.924; DD from peak 1.10: (0.88-1.10)/1.10 = -0.20"
+    },
+    {
+      "name": "no_drawdown",
+      "input": {"returns": [0.01, 0.02, 0.03]},
+      "expected": 0.0,
+      "note": "Always increasing = zero drawdown"
+    },
+    {
+      "name": "total_loss",
+      "input": {"returns": [-0.50, -0.50]},
+      "expected": -0.5,
+      "tolerance": 0.001,
+      "note": "Wealth: 0.50, 0.25; Peak stays at 0.50; DD = (0.25-0.50)/0.50 = -0.50"
+    },
+    {
+      "name": "recovery_then_drop",
+      "input": {"returns": [0.10, -0.05, 0.20, -0.30]},
+      "expected": -0.30,
+      "tolerance": 0.001,
+      "note": "Peak at 1.254, then drop to 0.878; DD = (0.878-1.254)/1.254 = -0.30"
+    },
+    {
+      "name": "empty",
+      "input": {"returns": []},
+      "expected": null
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "description": "Test cases for credit PnL calculation",
+  "spec_section": "§1.1",
+  "formula": "Credit_PnL = -(ΔSpread) × (PVBP / MidPrice)",
+  "cases": [
+    {
+      "name": "spread_tightening",
+      "input": {"spread_change": -10, "pvbp": 0.08, "mid_price": 100.0},
+      "expected": 0.008,
+      "note": "Tightening 10bp: -(-10) × 0.08/100 = 0.008"
+    },
+    {
+      "name": "spread_widening",
+      "input": {"spread_change": 10, "pvbp": 0.08, "mid_price": 100.0},
+      "expected": -0.008,
+      "note": "Widening 10bp: -(10) × 0.08/100 = -0.008"
+    },
+    {
+      "name": "zero_change",
+      "input": {"spread_change": 0, "pvbp": 0.08, "mid_price": 100.0},
+      "expected": 0.0
+    },
+    {
+      "name": "high_duration",
+      "input": {"spread_change": -5, "pvbp": 0.15, "mid_price": 95.0},
+      "expected": 0.00789,
+      "tolerance": 0.0001,
+      "note": "-(-5) × 0.15/95 ≈ 0.00789"
+    },
+    {
+      "name": "low_price",
+      "input": {"spread_change": -10, "pvbp": 0.08, "mid_price": 50.0},
+      "expected": 0.016,
+      "note": "Lower price amplifies PnL: -(-10) × 0.08/50 = 0.016"
+    }
+  ]
+}

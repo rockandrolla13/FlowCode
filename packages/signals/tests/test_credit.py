@@ -1,5 +1,8 @@
 """Tests for credit signal module."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,6 +12,8 @@ from src.credit import (
     range_position,
     compute_range_position_rolling,
 )
+
+FIXTURES_DIR = Path(__file__).resolve().parents[3] / "spec" / "fixtures"
 
 
 class TestCreditPnL:
@@ -169,3 +174,54 @@ class TestComputeRangePositionRolling:
         assert np.isnan(result.iloc[0])
         # Second value should have data
         assert not np.isnan(result.iloc[1])
+
+
+class TestCreditPnlFixtures:
+    """Fixture-backed tests for credit PnL (spec §1.1)."""
+
+    @pytest.fixture
+    def pnl_cases(self):
+        with open(FIXTURES_DIR / "pnl_cases.json") as f:
+            return json.load(f)
+
+    def test_all_pnl_fixture_cases(self, pnl_cases) -> None:
+        """Test credit_pnl against golden fixture cases."""
+        for case in pnl_cases["cases"]:
+            inp = case["input"]
+            spread_change = pd.Series([inp["spread_change"]])
+            pvbp = pd.Series([inp["pvbp"]])
+            mid_price = pd.Series([inp["mid_price"]])
+
+            result = credit_pnl(spread_change, pvbp, mid_price)
+
+            tol = case.get("tolerance", 0.001)
+            assert result.iloc[0] == pytest.approx(case["expected"], abs=tol), (
+                f"Case '{case['name']}': expected {case['expected']}, got {result.iloc[0]}"
+            )
+
+
+class TestRangePositionFixtures:
+    """Fixture-backed tests for range position (spec §1.2)."""
+
+    @pytest.fixture
+    def range_position_cases(self):
+        with open(FIXTURES_DIR / "range_position_cases.json") as f:
+            return json.load(f)
+
+    def test_all_range_position_fixture_cases(self, range_position_cases) -> None:
+        """Test range_position against golden fixture cases."""
+        for case in range_position_cases["cases"]:
+            inp = case["input"]
+            spread_curr = pd.Series([inp["spread_curr"]], dtype=float)
+            spread_avg = pd.Series([inp["spread_avg"]], dtype=float)
+            spread_max = pd.Series([inp["spread_max"]], dtype=float)
+            spread_min = pd.Series([inp["spread_min"]], dtype=float)
+
+            result = range_position(spread_curr, spread_avg, spread_max, spread_min)
+
+            if case["expected"] is None:
+                assert np.isnan(result.iloc[0]), f"Case '{case['name']}': expected NaN"
+            else:
+                assert result.iloc[0] == pytest.approx(case["expected"], abs=0.001), (
+                    f"Case '{case['name']}': expected {case['expected']}, got {result.iloc[0]}"
+                )

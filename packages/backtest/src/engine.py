@@ -76,21 +76,42 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
     -------
     dict[str, float]
         Dictionary of metrics.
+
+    Notes
+    -----
+    Sharpe and max drawdown formulas replicate the metrics packages for
+    the default case (rf=0). Cross-package imports are not possible due
+    to shared ``src/`` namespace.
     """
     if len(returns) < 2:
+        logger.warning("compute_metrics: fewer than 2 return periods, returning empty metrics")
         return {}
 
-    # Sharpe ratio (matches metrics.performance.sharpe_ratio: ddof=1, annualized)
+    # Sharpe ratio — spec §3.1: μ / σ * √252, ddof=1 (rf=0 assumed)
     std = returns.std(ddof=1)
     sharpe = float((returns.mean() / std) * np.sqrt(252)) if std > 0 else np.nan
 
-    # Max drawdown (matches metrics.risk.max_drawdown)
+    # Max drawdown — spec §4.1: (Value - Peak) / Peak, always <= 0
     cum_returns = (1 + returns).cumprod()
     running_max = cum_returns.cummax()
     drawdown = (cum_returns - running_max) / running_max
 
+    # Total return
+    total_return = float((1 + returns).prod() - 1)
+
+    # Annualized return — (1 + total)^(1/years) - 1, where years = n/252
+    n_periods = len(returns)
+    years = n_periods / 252
+    if total_return <= -1.0:
+        ann_return = np.nan
+    elif years > 0:
+        ann_return = float((1 + total_return) ** (1 / years) - 1)
+    else:
+        ann_return = np.nan
+
     return {
-        "total_return": float((1 + returns).prod() - 1),
+        "total_return": total_return,
+        "annualized_return": ann_return,
         "mean_return": float(returns.mean()),
         "volatility": float(std * np.sqrt(252)),
         "sharpe_ratio": sharpe,

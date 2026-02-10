@@ -1,0 +1,37 @@
+{
+  "description": "Test cases for hit rate",
+  "spec_section": "§5.1",
+  "formula": "HitRate = count(sign(signal_t) == sign(return_{t+lag})) / total",
+  "cases": [
+    {
+      "name": "perfect_accuracy",
+      "input": {
+        "signals": [1, 1, -1, -1, 1],
+        "returns": [0.01, 0.02, -0.01, -0.02, 0.01],
+        "lag": 0
+      },
+      "expected": 1.0,
+      "note": "Every signal correctly predicts return direction"
+    },
+    {
+      "name": "no_predictive_power",
+      "input": {
+        "signals": [1, -1, 1, -1, 1, -1, 1, -1],
+        "returns": [0.01, 0.02, -0.01, -0.02, 0.01, 0.02, -0.01, -0.02],
+        "lag": 0
+      },
+      "expected": 0.50,
+      "tolerance": 0.001,
+      "note": "50% hit rate = no better than random"
+    },
+    {
+      "name": "empty_signals",
+      "input": {
+        "signals": [],
+        "returns": [],
+        "lag": 0
+      },
+      "expected": null
+    }
+  ]
+}
