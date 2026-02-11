@@ -1,4 +1,6 @@
 # FlowCode Credit Analytics
+In all interactions and commit messages, be extremely concise, careful and technical and sacrifice grammar for the sake of concision.
+Make all plans multiphase. Create a `gh` issue for each multiphase plan to track phases, progress, and decisions.
 
 ## Ownership Model
 
@@ -113,6 +115,10 @@ packages/
 ├── signals/        # Thin wrappers over core
 ├── metrics/        # Performance & risk metrics
 └── backtest/       # Strategy harness
+
+Standalone modules (repo root):
+├── intraday_microstructure_analytics.py   # Intraday quote analytics (22 functions, 7 classes)
+└── intraday_quote_filters.py              # Intraday filters (16 functions, 5 schemas)
 ```
 
 ### Boundary Rules
@@ -269,6 +275,106 @@ Strategy harness. Orchestrates all packages.
 
 ---
 
+## Module: intraday_microstructure_analytics.py
+
+Intraday corporate bond microstructure analytics. Combines 4 composite dealer quote sources (MA, TW, TM, CBBT) with Fincad FV model data on a 5-min (isin, time_bin) grid.
+
+### Schema Layer
+- `CompositeSource` enum — MA, TW, TM, CBBT
+- `PriceSpace` enum — SPREAD, Z_SPREAD
+- `IntradayQuoteSchema` — column names for composite quote fields
+- `IntradayFVSchema` — Fincad model output columns + `venue_z_col()` helper
+- `JoinedIntradaySchema` — combined quote + FV schema
+
+### Public API (22 functions)
+
+**Session Management:**
+- `ResetPolicy` enum — DAILY, WEEKLY, INTRADAY_4H, EVENT_BASED, NONE
+- `_make_reset_mask(ts, policy)` → bool mask for session boundaries
+- `session_high/low(data, col, policy)` → expanding extremes within sessions
+
+**Carry Analytics:**
+- `carry_per_unit_risk(data)` → carry / |cr01| (logged guard on small cr01)
+- `carry_breakeven_spread_move(data)` → carry / cr01 in bps
+- `fv_deviation_carry_scaled(data, venue, price_space)` → deviation × carry days
+
+**Cross-Source Spreads:**
+- `bid_ask_spread(data, venue)` → offer - bid
+- `cross_source_vs_composite_fv(data)` → venue spreads - fv_spread (logs missing cols)
+
+**Intraday Dynamics:**
+- `quote_staleness(data, venue)` → seconds since last change
+- `intraday_spread_range(data, venue, policy)` → (session_low, session_high)
+- `cumulative_spread_move(data, venue, policy)` → session-relative cumulative move
+
+**Liquidity & Regime:**
+- `liquidity_filtered_universe(data, ...)` → filtered by staleness/ba thresholds
+- `bid_ask_regime(data, venue, tight, wide)` → "tight"/"normal"/"wide"/"unknown"
+
+**Cross-Venue:**
+- `cross_venue_price_dislocation(data)` → max - min spread across venues
+- `cross_venue_dislocation_carry_scaled(data)` → dislocation × carry days
+- `multi_venue_confirmation(data, venue_threshold)` → count venues agreeing on direction
+
+**Profiles:**
+- `spread_time_profile(data, venue, freq)` → mean spread by time bucket
+
+### Key Patterns
+- All functions take a `data: pd.DataFrame` indexed by `(isin, time_bin)`
+- NaN guards use `logger.warning()` not silent fallbacks
+- `_safe_diff(data, col, isin_col)` prevents cross-ISIN contamination
+- `field(default_factory=...)` for mutable dataclass defaults
+
+---
+
+## Module: intraday_quote_filters.py
+
+Intraday quote and TRACE transaction filters. Extends the analytics module with event detection across 5 sections.
+
+### Schema Layer
+- `TradeSide` enum — CUSTOMER_BUY, CUSTOMER_SELL, DEALER, UNKNOWN
+- `TraceTradeSchema` — raw TRACE trade columns
+- `TraceAggSchema` — 5-min aggregated TRACE columns
+- `FullIntradaySchema` — combined quote + FV + TRACE aggregate schema
+- `SignalType` enum — QUOTE_MOVE, TRACE_PRINT, TRACE_FLOW, TRACE_VS_QUOTE, FV_DEVIATION
+
+### Public API (16 functions)
+
+**Section 1 — Composite Quote Filters:**
+- `filter_significant_offer_tightening(data, min_bps, ...)` → tightening events
+- `filter_significant_bid_widening(data, min_bps, ...)` → widening events
+- `filter_significant_quote_moves(data, min_bps, side, ...)` → directional moves
+- `filter_significant_quote_moves_multi_venue(data, min_bps, ...)` → multi-venue confirmation
+- `filter_spread_compression_events(data, min_bps, ...)` → bid-ask compression
+
+**Section 2 — TRACE Transaction Filters:**
+- `filter_trace_big_prints(data, min_notional, ...)` → large trades
+- `filter_trace_block_trades(data, block_threshold, ...)` → block-sized trades
+- `filter_trace_volume_surge(data, surge_multiple, ...)` → volume spikes
+- `filter_trace_vs_quotes(data, min_bps, ...)` → trades deviating from quotes
+
+**Section 3 — TRACE Aggregated Filters:**
+- `aggregate_trace_to_bins(trades, freq)` → bin-level TRACE summary
+- `filter_trace_agg_imbalance(data, min_imbalance, direction)` → flow imbalance
+- `filter_trace_vwap_vs_composite(data, min_bps, ...)` → VWAP vs composite spread
+
+**Section 4 — FV-Anchored Filters:**
+- `filter_rich_cheap_extremes(data, min_deviation, direction)` → FV deviation events
+- `filter_rich_cheap_carry_scaled(data, min_carry_days, direction)` → carry-scaled deviations
+- `filter_trace_vs_fv(data, min_deviation, direction)` → TRACE execution vs FV
+
+**Section 5 — Unified Interface:**
+- `detect_directional_pressure(data, ...)` → combined signal from all filter types
+
+### Key Patterns
+- All filters return `.copy()` to prevent SettingWithCopyWarning
+- `_safe_diff(data, col, isin_col)` prevents cross-ISIN diff contamination
+- `direction` and `side` params validated with `ValueError` on bad input
+- Staleness filtering via `quote_staleness()` with configurable `max_stale_sec`
+- All NaN/missing-column cases logged, never silently dropped
+
+---
+
 ## Adding New Signals
 
 1. [ ] Add formula to `spec/SPEC.md` with section number
@@ -301,6 +407,11 @@ Strategy harness. Orchestrates all packages.
 | Backtest | Lookahead bias | Inflated Sharpe | `.shift(-h)` only in PnL |
 | Data | Missing CUSIP | KeyError | Reference data join |
 | Config | Missing key | KeyError | YAML structure |
+| Intraday diff | Cross-ISIN contamination | False signal at ISIN boundary | `_safe_diff()` isin_col param |
+| Intraday staleness | Stale quotes pass filter | Phantom moves from old data | `quote_staleness()` threshold |
+| Intraday carry | Division by near-zero cr01 | Inf carry ratio | `carry_per_unit_risk()` guard |
+| Intraday regime | Overlapping ba conditions | Double-classified rows | `bid_ask_regime()` np.select order |
+| TRACE filters | Missing agg columns | Silent empty results | `filter_trace_vwap_vs_composite()` col check |
 
 ---
 
