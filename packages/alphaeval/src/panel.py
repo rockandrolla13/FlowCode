@@ -68,6 +68,14 @@ def validate_panel(
             level=date_col,
         )
 
+    # Check for duplicate (date, instrument) keys
+    if df.index.duplicated().any():
+        n_dupes = int(df.index.duplicated().sum())
+        logger.warning(
+            "validate_panel: %d duplicate (date, instrument) rows detected",
+            n_dupes,
+        )
+
     # Check required columns
     if required_cols is not None:
         # Exclude index level names from required check

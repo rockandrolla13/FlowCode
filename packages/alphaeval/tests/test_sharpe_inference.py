@@ -58,6 +58,13 @@ class TestAnnEstimatedSR:
         ann = ann_estimated_sharpe_ratio(sr=0.05, periods=252)
         assert ann == pytest.approx(0.05 * np.sqrt(252))
 
+    def test_no_args_nan(self) -> None:
+        assert np.isnan(ann_estimated_sharpe_ratio())
+
+    def test_zero_std_returns_nan(self) -> None:
+        r = pd.Series([0.01, 0.01, 0.01])  # zero std → SR is NaN
+        assert np.isnan(ann_estimated_sharpe_ratio(r))
+
 
 # ── SR stdev ────────────────────────────────────────────────────────────────
 
@@ -168,6 +175,16 @@ class TestExpectedMaxSR:
     def test_no_args_raises(self) -> None:
         with pytest.raises(ValueError):
             expected_maximum_sr()
+
+    def test_insufficient_valid_trials_nan(self) -> None:
+        """DataFrame with 1-row trials → all per-column SRs are NaN."""
+        trials = pd.DataFrame({"a": [0.01], "b": [0.02], "c": [0.03]})
+        assert np.isnan(expected_maximum_sr(trials))
+
+    def test_nan_trials_sr_std_nan(self) -> None:
+        assert np.isnan(expected_maximum_sr(
+            independent_trials=5, trials_sr_std=np.nan, expected_mean_sr=0.5
+        ))
 
 
 # ── DSR ─────────────────────────────────────────────────────────────────────

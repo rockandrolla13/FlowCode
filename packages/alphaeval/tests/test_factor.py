@@ -91,6 +91,16 @@ class TestIrStar:
         signal, target = _make_panel(n_dates=1)
         assert np.isnan(ir_star(signal, target))
 
+    def test_constant_ic_zero_std_nan(self) -> None:
+        """When all daily ICs are identical, IR* should be NaN (0 std)."""
+        dates = pd.bdate_range("2024-01-01", periods=5)
+        instr = ["A", "B", "C", "D", "E"]
+        # Signal = target → perfect IC=1.0 every day → std=0 → NaN
+        signal = pd.DataFrame(
+            [[1, 2, 3, 4, 5]] * 5, index=dates, columns=instr, dtype=float
+        )
+        assert np.isnan(ir_star(signal, signal))
+
 
 class TestRSquared:
     def test_perfect_prediction(self) -> None:

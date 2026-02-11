@@ -36,6 +36,10 @@ def var_parametric(
         losses via L_t = -r_t before fitting. NaN if < 2 observations.
         If all returns identical (zero vol), returns mu_L directly.
     """
+    if not 0 < confidence < 1:
+        raise ValueError(
+            f"confidence must be in (0, 1), got {confidence}"
+        )
     clean = returns.dropna()
     if len(clean) < 2:
         return np.nan
@@ -72,6 +76,11 @@ def vpin(
     pd.Series
         VPIN values. NaN for first n_buckets-1 periods.
     """
+    if not volume_buy.index.equals(volume_sell.index):
+        logger.warning(
+            "vpin: volume_buy and volume_sell have different indices; "
+            "misalignment will introduce NaN"
+        )
     imbalance = (volume_buy - volume_sell).abs()
     total_vol = volume_buy + volume_sell
 

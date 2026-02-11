@@ -34,6 +34,15 @@ class TestVarParametric:
         v = var_parametric(returns)
         assert v == pytest.approx(-0.01)  # mu_L = -0.01, sigma=0
 
+    def test_invalid_confidence_raises(self) -> None:
+        returns = pd.Series([0.01, -0.02, 0.015])
+        with pytest.raises(ValueError, match="confidence must be in"):
+            var_parametric(returns, confidence=95)
+        with pytest.raises(ValueError):
+            var_parametric(returns, confidence=0.0)
+        with pytest.raises(ValueError):
+            var_parametric(returns, confidence=1.0)
+
 
 class TestVpin:
     def test_basic(self) -> None:
@@ -55,3 +64,16 @@ class TestVpin:
         sell = pd.Series([0] * 5)
         result = vpin(buy, sell, n_buckets=3)
         assert result.iloc[-1] == pytest.approx(1.0)
+
+    def test_zero_volume_nan(self) -> None:
+        buy = pd.Series([0] * 5)
+        sell = pd.Series([0] * 5)
+        result = vpin(buy, sell, n_buckets=3)
+        assert result.isna().all()
+
+    def test_known_value(self) -> None:
+        buy = pd.Series([100, 200, 150, 300, 100])
+        sell = pd.Series([50, 100, 200, 100, 200])
+        result = vpin(buy, sell, n_buckets=3)
+        # Window [0:3]: imbalance = |50|+|100|+|-50| = 200, total = 150+300+350 = 800
+        assert result.iloc[2] == pytest.approx(200.0 / 800.0)

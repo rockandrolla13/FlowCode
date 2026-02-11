@@ -58,3 +58,14 @@ class TestValidatePanel:
         result = validate_panel(df)
         date_level = result.index.get_level_values("date")
         assert pd.api.types.is_datetime64_any_dtype(date_level)
+
+    def test_duplicate_keys_detected(self) -> None:
+        """Duplicate (date, instrument) keys should be detected."""
+        df = pd.DataFrame({
+            "date": ["2024-01-01", "2024-01-01", "2024-01-02"],
+            "instrument": ["A", "A", "A"],
+            "returns": [0.01, 0.02, 0.03],
+        })
+        result = validate_panel(df)
+        assert len(result) == 3  # duplicates preserved, not dropped
+        assert result.index.duplicated().any()  # duplicates present

@@ -245,8 +245,11 @@ def num_independent_trials(
         avg_corr = float(upper.mean()) if len(upper) > 0 else 0.0
 
     if np.isnan(avg_corr):
-        logger.warning("num_independent_trials: avg_corr is NaN; defaulting to 0.0")
-        avg_corr = 0.0
+        logger.warning(
+            "num_independent_trials: avg_corr is NaN (constant returns?); "
+            "defaulting to 1.0 (fully correlated, N_eff=1) as conservative estimate"
+        )
+        avg_corr = 1.0
 
     n_eff = avg_corr + (1 - avg_corr) * m
     return int(np.ceil(max(1, n_eff)))

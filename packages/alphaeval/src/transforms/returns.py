@@ -39,7 +39,7 @@ def price_to_returns(
     if (price == 0).any():
         logger.warning("price_to_returns: input contains zero prices; returns may be inf")
     if method == "simple":
-        return price.pct_change()
+        return price.pct_change(fill_method=None)
     elif method == "log":
         return np.log(price / price.shift(1))
     else:

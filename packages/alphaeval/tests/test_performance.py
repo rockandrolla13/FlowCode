@@ -45,6 +45,10 @@ class TestWinRateTrades:
     def test_empty(self) -> None:
         assert np.isnan(win_rate_trades(pd.Series(dtype=float)))
 
+    def test_nan_excluded(self) -> None:
+        pnls = pd.Series([100, np.nan, -50])
+        assert win_rate_trades(pnls) == pytest.approx(50.0)  # 1 of 2
+
 
 class TestExpectancy:
     def test_basic(self) -> None:
@@ -141,6 +145,17 @@ class TestSortinoRatio:
         down_std = np.sqrt((downside ** 2).sum() / n)  # 1/T
         expected = np.sqrt(252) * excess.mean() / down_std
         assert sortino_ratio(returns) == pytest.approx(expected, rel=1e-10)
+
+    def test_nonzero_target(self) -> None:
+        """Returns between 0 and target count as downside."""
+        returns = pd.Series([0.02, 0.005, -0.01, 0.03, 0.001])
+        # target=0.01: excess = [0.01, -0.005, -0.02, 0.02, -0.009]
+        # downside = [0, -0.005, -0.02, 0, -0.009]
+        excess = returns - 0.01
+        downside = np.minimum(excess, 0.0)
+        down_std = np.sqrt((downside ** 2).sum() / len(returns))
+        expected = np.sqrt(252) * excess.mean() / down_std
+        assert sortino_ratio(returns, target=0.01) == pytest.approx(expected)
 
     def test_insufficient_data(self) -> None:
         assert np.isnan(sortino_ratio(pd.Series([0.01])))

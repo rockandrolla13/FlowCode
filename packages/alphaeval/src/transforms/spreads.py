@@ -50,7 +50,14 @@ def spread_return_proxy(
         Approximate return from spread change.
     """
     delta_s = spread.diff()
-    return -duration * delta_s
+    result = -duration * delta_s
+    if result.notna().sum() == 0 and len(spread) > 1:
+        logger.warning(
+            "spread_return_proxy: result is all-NaN; check index alignment "
+            "between spread (len=%d) and duration (len=%d)",
+            len(spread), len(duration),
+        )
+    return result
 
 
 def dv01_pnl(
@@ -73,4 +80,11 @@ def dv01_pnl(
     pd.Series
         P&L from spread move.
     """
-    return -dv01 * delta_bp
+    result = -dv01 * delta_bp
+    if result.notna().sum() == 0 and len(delta_bp) > 0:
+        logger.warning(
+            "dv01_pnl: result is all-NaN; check index alignment "
+            "between delta_bp (len=%d) and dv01 (len=%d)",
+            len(delta_bp), len(dv01),
+        )
+    return result
