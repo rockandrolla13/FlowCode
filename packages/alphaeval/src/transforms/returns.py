@@ -36,6 +36,8 @@ def price_to_returns(
     ValueError
         If method not in {"simple", "log"}.
     """
+    if (price == 0).any():
+        logger.warning("price_to_returns: input contains zero prices; returns may be inf")
     if method == "simple":
         return price.pct_change()
     elif method == "log":

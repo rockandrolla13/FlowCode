@@ -45,13 +45,14 @@ class MetricResult(NamedTuple):
         Metric name (e.g. "sharpe_ratio").
     value : float | None
         Scalar result. None if not computable.
-    meta : dict[str, Any]
+    meta : dict[str, Any] | None
         Extra info (e.g. {"annualized": True, "ddof": 1}).
+        None by default to avoid mutable default aliasing.
     """
 
     name: str
     value: float | None
-    meta: dict[str, Any] = {}
+    meta: dict[str, Any] | None = None
 
 
 # Required column sets for panel validation

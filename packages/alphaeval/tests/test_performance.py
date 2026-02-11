@@ -59,7 +59,10 @@ class TestMaxRunup:
     def test_basic(self) -> None:
         returns = pd.Series([0.10, -0.05, 0.20])
         ru = max_runup(returns)
-        assert ru > 0
+        # eq = [1.10, 1.045, 1.254], trough = [1.10, 1.045, 1.045]
+        # runup = [0, 0, (1.254-1.045)/1.045]
+        expected_ru = (1.10 * 0.95 * 1.20 - 1.10 * 0.95) / (1.10 * 0.95)
+        assert ru == pytest.approx(expected_ru)
 
     def test_monotonic_decline(self) -> None:
         returns = pd.Series([-0.05, -0.05, -0.05])
@@ -81,7 +84,9 @@ class TestCagr:
     def test_single_period(self) -> None:
         returns = pd.Series([0.10])
         result = cagr(returns, periods_per_year=252)
-        assert result > 0
+        # terminal=1.10, years=1/252, CAGR = 1.10^252 - 1
+        expected = 1.10 ** 252 - 1.0
+        assert result == pytest.approx(expected, rel=1e-6)
 
     def test_total_loss(self) -> None:
         returns = pd.Series([-1.0])
@@ -122,7 +127,10 @@ class TestSortinoRatio:
     def test_mixed_returns(self) -> None:
         returns = pd.Series([0.05, -0.03, 0.02, -0.01, 0.04])
         result = sortino_ratio(returns, target=0.0)
-        assert result > 0  # net positive mean
+        # Manual: downside = [0, -0.03, 0, -0.01, 0], down_std = sqrt((0.0009+0.0001)/5)
+        down_std = np.sqrt(0.001 / 5)
+        expected = np.sqrt(252) * returns.mean() / down_std
+        assert result == pytest.approx(expected)
 
     def test_population_convention(self) -> None:
         """Verify uses 1/T (not 1/(T-1)) for downside deviation."""

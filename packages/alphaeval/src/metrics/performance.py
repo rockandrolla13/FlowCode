@@ -52,10 +52,11 @@ def win_rate_trades(trade_pnls: pd.Series) -> float:
     float
         Win rate as percentage [0, 100]. NaN if no trades.
     """
-    n = len(trade_pnls.dropna())
+    clean = trade_pnls.dropna()
+    n = len(clean)
     if n == 0:
         return np.nan
-    winners = (trade_pnls > 0).sum()
+    winners = (clean > 0).sum()
     return float(winners / n * 100)
 
 

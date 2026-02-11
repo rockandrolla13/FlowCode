@@ -47,6 +47,21 @@ class TestIcStar:
         assert abs(ic) < 0.15  # Random → near zero
 
 
+class TestIcStarMultiIndex:
+    def test_multiindex_matches_pivoted(self) -> None:
+        signal, target = _make_panel(n_dates=10, n_instruments=5)
+        ic_pivoted = ic_star(signal, target)
+        # Convert to MultiIndex (date, instrument) Series
+        sig_stacked = signal.stack()
+        sig_stacked.index.names = ["date", "instrument"]
+        tgt_stacked = target.stack()
+        tgt_stacked.index.names = ["date", "instrument"]
+        sig_mi = sig_stacked.to_frame("signal")
+        tgt_mi = tgt_stacked.to_frame("target")
+        ic_mi = ic_star(sig_mi, tgt_mi)
+        assert ic_mi == pytest.approx(ic_pivoted, abs=1e-10)
+
+
 class TestRankIcStar:
     def test_positive_rank_ic(self) -> None:
         signal, target = _make_panel()

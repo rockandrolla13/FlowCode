@@ -11,7 +11,11 @@ class TestVarParametric:
         np.random.seed(42)
         returns = pd.Series(np.random.normal(0.001, 0.02, 500))
         v = var_parametric(returns, confidence=0.95)
-        assert v > 0  # Positive loss amount
+        # Verify against manual: losses = -returns, VaR = mu_L + z * sigma_L
+        losses = -returns
+        from scipy import stats
+        expected = losses.mean() + stats.norm.ppf(0.95) * losses.std(ddof=1)
+        assert v == pytest.approx(expected)
 
     def test_vs_manual(self) -> None:
         returns = pd.Series([0.01, -0.02, 0.015, -0.005, 0.008])

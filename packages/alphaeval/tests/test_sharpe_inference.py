@@ -118,14 +118,21 @@ class TestMinTRL:
     def test_sr_below_benchmark_inf(self) -> None:
         r = _make_returns(mu=-0.001)
         sr = estimated_sharpe_ratio(r)
-        if sr < 0:
-            mtrl = min_track_record_length(r, sr_benchmark=0.0)
-            assert mtrl == np.inf
+        assert sr < 0, "Seed should produce negative SR for mu=-0.001"
+        mtrl = min_track_record_length(r, sr_benchmark=0.0)
+        assert mtrl == np.inf
 
 
 # ── N_eff ───────────────────────────────────────────────────────────────────
 
 class TestNumIndependentTrials:
+    def test_no_args_raises(self) -> None:
+        with pytest.raises(ValueError):
+            num_independent_trials()
+
+    def test_m_without_corr_raises(self) -> None:
+        with pytest.raises(ValueError):
+            num_independent_trials(m=10)
     def test_uncorrelated_equals_m(self) -> None:
         n = num_independent_trials(m=20, avg_corr=0.0)
         assert n == 20
@@ -158,6 +165,10 @@ class TestExpectedMaxSR:
         )
         assert ems == pytest.approx(0.5)
 
+    def test_no_args_raises(self) -> None:
+        with pytest.raises(ValueError):
+            expected_maximum_sr()
+
 
 # ── DSR ─────────────────────────────────────────────────────────────────────
 
@@ -176,3 +187,17 @@ class TestDSR:
 
     def test_no_selected_returns_nan(self) -> None:
         assert np.isnan(deflated_sharpe_ratio(expected_max_sr=1.0))
+
+    def test_no_args_raises(self) -> None:
+        r = _make_returns()
+        with pytest.raises(ValueError):
+            deflated_sharpe_ratio(returns_selected=r)
+
+
+# ── PSR edge ───────────────────────────────────────────────────────────────
+
+class TestPSREdge:
+    def test_sr_std_zero_returns_nan(self) -> None:
+        r = _make_returns()
+        psr = probabilistic_sharpe_ratio(r, sr_benchmark=0.0, sr=0.05, sr_std=0.0)
+        assert np.isnan(psr)

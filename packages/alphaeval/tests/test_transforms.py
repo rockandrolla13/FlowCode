@@ -88,8 +88,15 @@ class TestDrawdownSeries:
     def test_drawdown_after_peak(self) -> None:
         returns = pd.Series([0.10, -0.20, 0.05])
         dd = drawdown_series(returns)
+        # eq = [1.10, 0.88, 0.924], peak = [1.10, 1.10, 1.10]
         assert dd.iloc[0] == pytest.approx(0.0)
-        assert dd.iloc[1] > 0  # in drawdown
+        assert dd.iloc[1] == pytest.approx((1.10 - 0.88) / 1.10)
+        assert dd.iloc[2] == pytest.approx((1.10 - 0.924) / 1.10)
+
+    def test_total_loss_nan(self) -> None:
+        returns = pd.Series([-1.0])
+        dd = drawdown_series(returns)
+        assert np.isnan(dd.iloc[0])  # 0/0 → NaN
 
 
 class TestRunupSeries:
@@ -101,5 +108,14 @@ class TestRunupSeries:
     def test_runup_after_trough(self) -> None:
         returns = pd.Series([-0.10, 0.20, 0.05])
         ru = runup_series(returns)
+        # eq = [0.90, 1.08, 1.134], trough = [0.90, 0.90, 0.90]
         assert ru.iloc[0] == pytest.approx(0.0)
-        assert ru.iloc[1] > 0  # recovering from trough
+        assert ru.iloc[1] == pytest.approx((1.08 - 0.90) / 0.90)
+        assert ru.iloc[2] == pytest.approx((1.134 - 0.90) / 0.90)
+
+    def test_total_loss_nan(self) -> None:
+        returns = pd.Series([-1.0, 0.50])
+        ru = runup_series(returns)
+        # eq = [0.0, 0.0], trough = [0.0, 0.0], ru = NaN (0/0)
+        assert np.isnan(ru.iloc[0])
+        assert np.isnan(ru.iloc[1])

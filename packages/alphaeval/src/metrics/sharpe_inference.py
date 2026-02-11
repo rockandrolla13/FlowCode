@@ -101,6 +101,9 @@ def estimated_sharpe_ratio_stdev(
     skew = float(scipy_stats.skew(clean))
     # fisher=False → non-excess kurtosis (normal = 3)
     kurt = float(scipy_stats.kurtosis(clean, fisher=False))
+    if np.isnan(skew) or np.isnan(kurt):
+        logger.warning("SR stdev: skew/kurtosis NaN (zero-variance input?)")
+        return np.nan
 
     numerator = 1.0 + 0.5 * sr**2 - skew * sr + ((kurt - 3) / 4) * sr**2
     if numerator < 0:
@@ -222,6 +225,13 @@ def num_independent_trials(
     -------
     int
         Effective independent trials (rounded up).
+
+    Notes
+    -----
+    Uses the linear interpolation variant ``rho + (1 - rho) * m`` from the
+    reference implementation. The alternative harmonic variant
+    ``m / (1 + (m-1) * rho)`` gives smaller N_eff at moderate correlations
+    and is more conservative for DSR. Choose based on your use case.
     """
     if m is None:
         if trials_returns is None:
@@ -233,6 +243,10 @@ def num_independent_trials(
         corr = trials_returns.corr().values
         upper = corr[np.triu_indices_from(corr, k=1)]
         avg_corr = float(upper.mean()) if len(upper) > 0 else 0.0
+
+    if np.isnan(avg_corr):
+        logger.warning("num_independent_trials: avg_corr is NaN; defaulting to 0.0")
+        avg_corr = 0.0
 
     n_eff = avg_corr + (1 - avg_corr) * m
     return int(np.ceil(max(1, n_eff)))
@@ -276,7 +290,17 @@ def expected_maximum_sr(
         if trials_returns is None:
             raise ValueError("Provide trials_returns or trials_sr_std")
         srs = trials_returns.apply(estimated_sharpe_ratio)
+        n_valid = srs.notna().sum()
+        if n_valid < 2:
+            logger.warning(
+                "expected_maximum_sr: %d valid trial SRs out of %d; returning NaN",
+                n_valid, len(srs),
+            )
+            return np.nan
         trials_sr_std = float(srs.std(ddof=1))
+
+    if np.isnan(trials_sr_std):
+        return np.nan
 
     if independent_trials <= 1:
         return expected_mean_sr
