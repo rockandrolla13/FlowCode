@@ -1,0 +1,21 @@
+# alphaeval — Default Configuration
+
+alphaeval:
+  # Annualization
+  periods_per_year: 252        # Trading days (configurable)
+
+  # Standard deviation convention
+  ddof: 1                      # Sample std throughout (except Sortino downside: 1/T)
+
+  # NaN policy
+  nan_policy: "drop_per_metric"  # Each metric drops NaN from its own inputs
+
+  # Spread units
+  spread_unit: "bp"            # Basis points; transforms enforce via naming
+
+  # VaR
+  var_confidence: 0.95         # Default confidence level
+
+  # Sharpe inference
+  sharpe_benchmark: 0.0        # SR* for PSR/DSR
+  psr_confidence: 0.95         # Probability threshold for minTRL
