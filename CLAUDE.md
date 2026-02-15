@@ -1,7 +1,7 @@
 # FlowCode Credit Analytics
 In all interactions and commit messages, be extremely concise, careful and technical and sacrifice grammar for the sake of concision.
 Make all plans multiphase. Create a `gh` issue for each multiphase plan to track phases, progress, and decisions.
-
+create short PRs of 250 lines or less. 
 ## Ownership Model
 
 | Domain | Owner | Agent Role |
