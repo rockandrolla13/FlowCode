@@ -232,6 +232,10 @@ def num_independent_trials(
     reference implementation. The alternative harmonic variant
     ``m / (1 + (m-1) * rho)`` gives smaller N_eff at moderate correlations
     and is more conservative for DSR. Choose based on your use case.
+
+    If avg_corr is NaN (e.g., constant returns across all trials), defaults
+    to 1.0 (fully correlated), yielding N_eff=1. This is conservative for
+    DSR but may over-penalize strategies with genuinely independent signals.
     """
     if m is None:
         if trials_returns is None:

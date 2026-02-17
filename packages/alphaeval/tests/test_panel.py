@@ -69,3 +69,10 @@ class TestValidatePanel:
         result = validate_panel(df)
         assert len(result) == 3  # duplicates preserved, not dropped
         assert result.index.duplicated().any()  # duplicates present
+
+    def test_empty_dataframe(self) -> None:
+        """Empty DataFrame should return empty MultiIndex DataFrame."""
+        df = pd.DataFrame({"date": [], "instrument": [], "returns": []})
+        result = validate_panel(df, required_cols={"date", "instrument", "returns"})
+        assert len(result) == 0
+        assert isinstance(result.index, pd.MultiIndex)

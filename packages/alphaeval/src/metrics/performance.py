@@ -15,6 +15,9 @@ from ..transforms.returns import equity_curve
 
 logger = logging.getLogger(__name__)
 
+# Near-zero threshold for floating-point comparisons
+EPSILON = 1e-14
+
 
 def profit_factor(trade_pnls: pd.Series) -> float:
     """Gross profit / gross loss ratio.
@@ -32,7 +35,7 @@ def profit_factor(trade_pnls: pd.Series) -> float:
     """
     gains = trade_pnls[trade_pnls > 0].sum()
     losses = trade_pnls[trade_pnls < 0].abs().sum()
-    if abs(losses) < 1e-14:
+    if abs(losses) < EPSILON:
         if gains > 0:
             return np.inf
         return np.nan
@@ -126,7 +129,7 @@ def cagr(
     if terminal <= 0:
         return -1.0
     years = n / periods_per_year
-    if abs(years) < 1e-14:
+    if abs(years) < EPSILON:
         return np.nan
     return float(terminal ** (1.0 / years) - 1.0)
 
@@ -150,7 +153,7 @@ def tstat_returns(returns: pd.Series) -> float:
         return np.nan
     mu = clean.mean()
     sigma = clean.std(ddof=1)
-    if abs(sigma) < 1e-14:
+    if abs(sigma) < EPSILON:
         return np.nan
     return float(mu / (sigma / np.sqrt(n)))
 
@@ -186,7 +189,7 @@ def sortino_ratio(
     excess = clean - target
     downside = np.minimum(excess, 0.0)
     downside_std = np.sqrt((downside ** 2).sum() / n)  # 1/T (population)
-    if abs(downside_std) < 1e-14:
+    if abs(downside_std) < EPSILON:
         return np.nan
     mu = excess.mean()
     return float(np.sqrt(periods_per_year) * mu / downside_std)

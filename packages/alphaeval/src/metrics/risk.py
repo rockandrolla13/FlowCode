@@ -77,9 +77,10 @@ def vpin(
         VPIN values. NaN for first n_buckets-1 periods.
     """
     if not volume_buy.index.equals(volume_sell.index):
+        n_mismatch = len(volume_buy.index.symmetric_difference(volume_sell.index))
         logger.warning(
-            "vpin: volume_buy and volume_sell have different indices; "
-            "misalignment will introduce NaN"
+            "vpin: indices differ by %d entries; misalignment may produce NaN",
+            n_mismatch,
         )
     imbalance = (volume_buy - volume_sell).abs()
     total_vol = volume_buy + volume_sell

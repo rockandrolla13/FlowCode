@@ -13,6 +13,24 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def _ic_for_date(
+    sig_row: pd.Series,
+    tgt_row: pd.Series,
+    method: str,
+    dt: object,
+) -> float:
+    """Compute IC for a single date's cross-section."""
+    s = sig_row.dropna()
+    t = tgt_row.dropna()
+    common = s.index.intersection(t.index)
+    if len(common) < 3:
+        logger.debug("IC: date %s has %d instruments (<3), skipping", dt, len(common))
+        return np.nan
+    if method == "spearman":
+        return float(s[common].rank().corr(t[common].rank()))
+    return float(s[common].corr(t[common]))
+
+
 def _daily_ic(
     signal: pd.DataFrame,
     target: pd.DataFrame,
@@ -37,20 +55,11 @@ def _daily_ic(
     # If both are (date x instrument) pivoted DataFrames
     if isinstance(signal.index, pd.DatetimeIndex) and signal.ndim == 2:
         dates = signal.index
-        ics = []
-        for dt in dates:
-            s = signal.loc[dt].dropna()
-            t = target.loc[dt].dropna()
-            common = s.index.intersection(t.index)
-            if len(common) < 3:
-                logger.debug("IC: date %s has %d instruments (<3), skipping", dt, len(common))
-                ics.append(np.nan)
-                continue
-            if method == "spearman":
-                ics.append(float(s[common].rank().corr(t[common].rank())))
-            else:
-                ics.append(float(s[common].corr(t[common])))
-        return pd.Series(ics, index=dates, name="ic")
+        ics = pd.Series(
+            {dt: _ic_for_date(signal.loc[dt], target.loc[dt], method, dt) for dt in dates},
+            name="ic",
+        )
+        return ics
 
     # MultiIndex (date, instrument) → pivot first
     if isinstance(signal.index, pd.MultiIndex):
@@ -156,6 +165,12 @@ def r_squared(
     -------
     float
         R² = 1 - SSE/SST. Can be negative for poor models.
+
+    Notes
+    -----
+    Argument order is (predicted, actual), which differs from sklearn's
+    (y_true, y_pred) convention. This matches the mathematical notation
+    R² = 1 - SS_res/SS_tot where SS_res = sum((y - yhat)²).
     """
     common = predicted.dropna().index.intersection(actual.dropna().index)
     if len(common) < 2:
