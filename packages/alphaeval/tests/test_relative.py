@@ -33,3 +33,20 @@ class TestTrackingError:
         te_daily = tracking_error(r, b, periods_per_year=252)
         te_monthly = tracking_error(r, b, periods_per_year=12)
         assert te_daily > te_monthly  # sqrt(252) > sqrt(12)
+
+    def test_misaligned_indices_raises(self) -> None:
+        """I9 fix: index misalignment losing observations must raise."""
+        r = pd.Series([0.01, -0.02, 0.03], index=[0, 1, 2])
+        b = pd.Series([0.005, -0.01, 0.02], index=[0, 1, 3])  # index 3 vs 2
+        with pytest.raises(ValueError, match="misalignment"):
+            tracking_error(r, b)
+
+    def test_superset_index_ok(self) -> None:
+        """When benchmark has superset index, no observations lost → no raise."""
+        idx = pd.date_range("2024-01-01", periods=5, freq="B")
+        r = pd.Series([0.01, -0.02, 0.03, 0.01, -0.01], index=idx)
+        # Benchmark has extra date — superset of r's index
+        idx_super = pd.date_range("2024-01-01", periods=6, freq="B")
+        b = pd.Series([0.005, -0.01, 0.02, 0.005, -0.005, 0.001], index=idx_super)
+        te = tracking_error(r, b)
+        assert te > 0

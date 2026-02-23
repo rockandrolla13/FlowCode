@@ -21,11 +21,22 @@ Submodules (import directly)::
                                   expected_maximum_sr, deflated_sharpe_ratio
 """
 
-from .types import EvalConfig, MetricResult
+from .types import (
+    EvalConfig,
+    MetricResult,
+    REQUIRED_FACTOR,
+    REQUIRED_SPREAD,
+    REQUIRED_TIMESERIES,
+    REQUIRED_TRADES,
+)
 from .panel import validate_panel
 
 __all__ = [
     "EvalConfig",
     "MetricResult",
+    "REQUIRED_FACTOR",
+    "REQUIRED_SPREAD",
+    "REQUIRED_TIMESERIES",
+    "REQUIRED_TRADES",
     "validate_panel",
 ]

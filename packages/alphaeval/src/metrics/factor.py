@@ -12,23 +12,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-
-def _ic_for_date(
-    sig_row: pd.Series,
-    tgt_row: pd.Series,
-    method: str,
-    dt: object,
-) -> float:
-    """Compute IC for a single date's cross-section."""
-    s = sig_row.dropna()
-    t = tgt_row.dropna()
-    common = s.index.intersection(t.index)
-    if len(common) < 3:
-        logger.debug("IC: date %s has %d instruments (<3), skipping", dt, len(common))
-        return np.nan
-    if method == "spearman":
-        return float(s[common].rank().corr(t[common].rank()))
-    return float(s[common].corr(t[common]))
+__all__ = ["ic_star", "rank_ic_star", "ir_star", "r_squared", "tstat_ic"]
 
 
 def _daily_ic(
@@ -52,17 +36,51 @@ def _daily_ic(
     pd.Series
         Daily IC values indexed by date.
     """
-    # If both are (date x instrument) pivoted DataFrames
-    if isinstance(signal.index, pd.DatetimeIndex) and signal.ndim == 2:
-        dates = signal.index
-        ics = pd.Series(
-            {dt: _ic_for_date(signal.loc[dt], target.loc[dt], method, dt) for dt in dates},
-            name="ic",
-        )
+    if method not in ("pearson", "spearman"):
+        raise ValueError(f"method must be 'pearson' or 'spearman', got '{method}'")
+
+    # If both are (date x instrument) pivoted DataFrames (any index type)
+    if not isinstance(signal.index, pd.MultiIndex) and signal.ndim == 2:
+        # Transpose: each date becomes a column, instruments are rows
+        s_t = signal.T
+        t_t = target.T
+
+        # Count common non-NaN observations per date
+        n_common = (s_t.notna() & t_t.notna()).sum()
+
+        # Vectorized correlation across all dates
+        if method == "spearman":
+            ics = s_t.rank().corrwith(t_t.rank())
+        else:
+            ics = s_t.corrwith(t_t)
+
+        # Mask dates with < 3 common instruments
+        ics = ics.where(n_common >= 3)
+        ics.name = "ic"
+
+        n_skipped = int((n_common < 3).sum())
+        n_dates = len(signal.index)
+        if n_skipped > 0 and n_dates > 0:
+            pct = 100 * n_skipped / n_dates
+            if pct > 20:
+                logger.warning(
+                    "_daily_ic: %d of %d dates (%.0f%%) skipped (<3 instruments)",
+                    n_skipped, n_dates, pct,
+                )
         return ics
 
     # MultiIndex (date, instrument) → pivot first
     if isinstance(signal.index, pd.MultiIndex):
+        if signal.ndim == 2 and signal.shape[1] != 1:
+            raise ValueError(
+                f"MultiIndex signal must have exactly 1 column, got {signal.shape[1]}. "
+                "Select the target column before calling _daily_ic."
+            )
+        if target.ndim == 2 and target.shape[1] != 1:
+            raise ValueError(
+                f"MultiIndex target must have exactly 1 column, got {target.shape[1]}. "
+                "Select the target column before calling _daily_ic."
+            )
         sig_piv = signal.iloc[:, 0].unstack() if signal.ndim == 2 else signal.unstack()
         tgt_piv = target.iloc[:, 0].unstack() if target.ndim == 2 else target.unstack()
         return _daily_ic(sig_piv, tgt_piv, method=method)
@@ -121,24 +139,31 @@ def rank_ic_star(
 
 
 def ir_star(
-    signal: pd.DataFrame,
-    target: pd.DataFrame,
+    signal: pd.DataFrame | None = None,
+    target: pd.DataFrame | None = None,
+    *,
+    ics: pd.Series | None = None,
 ) -> float:
     """IC Information Ratio — IC* / std(IC).
 
     Parameters
     ----------
-    signal : pd.DataFrame
-        Factor signal, pivoted (date x instrument).
-    target : pd.DataFrame
-        Next-period outcome, same shape.
+    signal : pd.DataFrame | None
+        Factor signal, pivoted (date x instrument). Required if ics is None.
+    target : pd.DataFrame | None
+        Next-period outcome, same shape. Required if ics is None.
+    ics : pd.Series | None
+        Pre-computed daily IC series. When provided, signal/target are ignored.
 
     Returns
     -------
     float
         IR* = mean(IC_t) / std(IC_t). NaN if < 2 days or std=0.
     """
-    ics = _daily_ic(signal, target, method="pearson")
+    if ics is None:
+        if signal is None or target is None:
+            raise ValueError("ir_star: provide (signal, target) or ics")
+        ics = _daily_ic(signal, target, method="pearson")
     clean = ics.dropna()
     if len(clean) < 2:
         return np.nan
@@ -154,6 +179,10 @@ def r_squared(
 ) -> float:
     """Coefficient of determination R².
 
+    Unlike ic_star/rank_ic_star/ir_star (which take pivoted DataFrames),
+    this function operates on flat predicted/actual vectors. Extract the
+    relevant column from your panel before calling.
+
     Parameters
     ----------
     predicted : pd.Series
@@ -165,12 +194,6 @@ def r_squared(
     -------
     float
         R² = 1 - SSE/SST. Can be negative for poor models.
-
-    Notes
-    -----
-    Argument order is (predicted, actual), which differs from sklearn's
-    (y_true, y_pred) convention. This matches the mathematical notation
-    R² = 1 - SS_res/SS_tot where SS_res = sum((y - yhat)²).
     """
     common = predicted.dropna().index.intersection(actual.dropna().index)
     if len(common) < 2:

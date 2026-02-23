@@ -12,6 +12,8 @@ from scipy import stats as scipy_stats
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["var_parametric", "vpin"]
+
 
 def var_parametric(
     returns: pd.Series,
@@ -74,14 +76,28 @@ def vpin(
     Returns
     -------
     pd.Series
-        VPIN values. NaN for first n_buckets-1 periods.
+        VPIN values in [0, 1]. NaN for first n_buckets-1 periods.
+        Negative volumes are clamped to 0 with a warning.
+
+    Raises
+    ------
+    ValueError
+        If volume_buy and volume_sell have different indices.
     """
     if not volume_buy.index.equals(volume_sell.index):
-        n_mismatch = len(volume_buy.index.symmetric_difference(volume_sell.index))
-        logger.warning(
-            "vpin: indices differ by %d entries; misalignment may produce NaN",
-            n_mismatch,
+        raise ValueError(
+            "vpin: volume_buy and volume_sell have different indices "
+            f"(len {len(volume_buy)} vs {len(volume_sell)}). "
+            "Align indices before calling vpin."
         )
+    if (volume_buy < 0).any() or (volume_sell < 0).any():
+        n_neg = int((volume_buy < 0).sum() + (volume_sell < 0).sum())
+        logger.warning(
+            "vpin: %d negative volume entries detected; clamping to 0",
+            n_neg,
+        )
+        volume_buy = volume_buy.clip(lower=0)
+        volume_sell = volume_sell.clip(lower=0)
     imbalance = (volume_buy - volume_sell).abs()
     total_vol = volume_buy + volume_sell
 
@@ -89,5 +105,11 @@ def vpin(
     rolling_vol = total_vol.rolling(n_buckets, min_periods=n_buckets).sum()
 
     result = rolling_imb / rolling_vol
+    n_inf = int(np.isinf(result).sum())
+    if n_inf > 0:
+        logger.warning(
+            "vpin: %d inf values from zero total volume windows; replacing with NaN",
+            n_inf,
+        )
     result = result.replace([np.inf, -np.inf], np.nan)
     return result

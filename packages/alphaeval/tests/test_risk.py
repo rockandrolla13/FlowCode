@@ -77,3 +77,29 @@ class TestVpin:
         result = vpin(buy, sell, n_buckets=3)
         # Window [0:3]: imbalance = |50|+|100|+|-50| = 200, total = 150+300+350 = 800
         assert result.iloc[2] == pytest.approx(200.0 / 800.0)
+
+    def test_index_mismatch_raises(self) -> None:
+        """C4 fix: different indices must raise ValueError."""
+        buy = pd.Series([100, 200], index=[0, 1])
+        sell = pd.Series([50, 100], index=[0, 2])
+        with pytest.raises(ValueError, match="different indices"):
+            vpin(buy, sell)
+
+    def test_negative_volumes_clamped(self) -> None:
+        """C2 fix: negative volumes clamped to 0, result in [0,1]."""
+        buy = pd.Series([100, -50, 200, 150, 100])
+        sell = pd.Series([50, 100, 200, 100, 200])
+        result = vpin(buy, sell, n_buckets=3)
+        # After clamping -50→0, all VPIN values in [0,1]
+        valid = result.dropna()
+        assert (valid >= 0).all()
+        assert (valid <= 1).all()
+
+    def test_negative_volumes_clamped_with_caplog(self, caplog) -> None:
+        """C2 fix: negative volumes produce warning."""
+        import logging
+        buy = pd.Series([100, -50, 200, 150, 100])
+        sell = pd.Series([50, 100, 200, 100, 200])
+        with caplog.at_level(logging.WARNING, logger="src.metrics.risk"):
+            vpin(buy, sell, n_buckets=3)
+        assert "negative volume" in caplog.text

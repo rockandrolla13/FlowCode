@@ -1,6 +1,8 @@
 """Core types for alphaeval.
 
 Dataclasses for configuration, metric results, and panel schema contracts.
+These are convenience groupings for callers — metric functions accept
+primitive args directly rather than requiring these types.
 """
 from __future__ import annotations
 
@@ -59,4 +61,4 @@ class MetricResult(NamedTuple):
 REQUIRED_TIMESERIES = {"date", "instrument", "returns"}
 REQUIRED_SPREAD = {"date", "instrument", "spread"}
 REQUIRED_FACTOR = {"date", "instrument", "signal", "target"}
-REQUIRED_TRADES = {"trade_id", "instrument", "pnl"}
+REQUIRED_TRADES = {"date", "instrument", "trade_id", "pnl"}

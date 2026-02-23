@@ -12,6 +12,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["tracking_error"]
+
 
 def tracking_error(
     returns: pd.Series,
@@ -32,17 +34,23 @@ def tracking_error(
     Returns
     -------
     float
-        TE = sqrt(A) * std(r_p - r_b). NaN if < 2 obs.
+        TE = sqrt(A) * std(r_p - r_b, ddof=1). NaN if < 2 obs.
+
+    Raises
+    ------
+    ValueError
+        If indices differ and observations are lost from misalignment.
     """
-    active = returns - benchmark
-    n_expected = min(len(returns.dropna()), len(benchmark.dropna()))
-    n_actual = int(active.notna().sum())
-    if n_actual < n_expected:
-        logger.warning(
-            "tracking_error: index misalignment dropped %d of %d observations",
-            n_expected - n_actual, n_expected,
-        )
-    active = active.dropna()
+    if not returns.index.equals(benchmark.index):
+        n_expected = min(len(returns.dropna()), len(benchmark.dropna()))
+        common = returns.index.intersection(benchmark.index)
+        n_common = len(common)
+        if n_common < n_expected:
+            raise ValueError(
+                f"tracking_error: index misalignment — {n_expected - n_common} of "
+                f"{n_expected} observations lost. Align indices before calling."
+            )
+    active = (returns - benchmark).dropna()
     if len(active) < 2:
         return np.nan
     return float(np.sqrt(periods_per_year) * active.std(ddof=1))

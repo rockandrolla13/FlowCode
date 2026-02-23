@@ -13,6 +13,17 @@ from scipy import stats as scipy_stats
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "estimated_sharpe_ratio",
+    "ann_estimated_sharpe_ratio",
+    "estimated_sharpe_ratio_stdev",
+    "probabilistic_sharpe_ratio",
+    "min_track_record_length",
+    "num_independent_trials",
+    "expected_maximum_sr",
+    "deflated_sharpe_ratio",
+]
+
 
 def estimated_sharpe_ratio(returns: pd.Series) -> float:
     """Estimated Sharpe ratio (risk-free = 0).
@@ -60,7 +71,9 @@ def ann_estimated_sharpe_ratio(
     """
     if sr is None:
         if returns is None:
-            return np.nan
+            raise ValueError(
+                "ann_estimated_sharpe_ratio: either 'returns' or 'sr' must be provided"
+            )
         sr = estimated_sharpe_ratio(returns)
     if np.isnan(sr):
         return np.nan
@@ -172,25 +185,46 @@ def min_track_record_length(
     prob : float, default 0.95
         Required confidence.
     sr : float | None
-        Pre-computed SR.
+        Pre-computed SR. Must be from the same sample as ``returns``
+        (i.e. same n) for the formula to be valid.
     sr_std : float | None
-        Pre-computed SR stdev.
+        Pre-computed SR stdev. Must be from the same sample as ``returns``.
 
     Returns
     -------
     float
         minTRL in observations. inf if SR <= SR*. NaN if inputs insufficient.
+
+    Notes
+    -----
+    When passing pre-computed ``sr``/``sr_std``, ensure they were estimated
+    from the same ``returns`` series. The formula uses ``n = len(returns.dropna())``
+    in the scaling term; a mismatch produces incorrect minTRL.
     """
+    if not 0 < prob < 1:
+        raise ValueError(f"prob must be in (0, 1), got {prob}")
     clean = returns.dropna()
     n = len(clean)
     if n < 3:
         return np.nan
     if sr is None:
         sr = estimated_sharpe_ratio(clean)
+    else:
+        logger.debug(
+            "minTRL: using pre-computed sr=%.4f with n=%d from returns; "
+            "ensure sr was estimated from the same sample",
+            sr, n,
+        )
     if np.isnan(sr):
         return np.nan
     if sr_std is None:
         sr_std = estimated_sharpe_ratio_stdev(clean, sr=sr)
+    else:
+        logger.debug(
+            "minTRL: using pre-computed sr_std=%.4f with n=%d from returns; "
+            "formula uses sr_std^2*(n-1) — n mismatch corrupts result",
+            sr_std, n,
+        )
     if np.isnan(sr_std):
         return np.nan
 
@@ -224,7 +258,7 @@ def num_independent_trials(
     Returns
     -------
     int
-        Effective independent trials (rounded up).
+        Effective independent trials (rounded up), clamped to [1, m].
 
     Notes
     -----
@@ -233,9 +267,8 @@ def num_independent_trials(
     ``m / (1 + (m-1) * rho)`` gives smaller N_eff at moderate correlations
     and is more conservative for DSR. Choose based on your use case.
 
-    If avg_corr is NaN (e.g., constant returns across all trials), defaults
-    to 1.0 (fully correlated), yielding N_eff=1. This is conservative for
-    DSR but may over-penalize strategies with genuinely independent signals.
+    When avg_corr < 0, the formula yields N_eff > m (negatively correlated
+    trials are "more than independent"). This is clamped to m.
     """
     if m is None:
         if trials_returns is None:
@@ -246,17 +279,34 @@ def num_independent_trials(
             raise ValueError("Provide trials_returns or avg_corr")
         corr = trials_returns.corr().values
         upper = corr[np.triu_indices_from(corr, k=1)]
-        avg_corr = float(upper.mean()) if len(upper) > 0 else 0.0
+        # Filter NaN pairs (e.g. from constant-return trials) before averaging
+        valid = upper[~np.isnan(upper)]
+        if len(valid) == 0:
+            raise ValueError(
+                "num_independent_trials: all pairwise correlations are NaN "
+                "(constant returns across all trials?). Cannot compute N_eff."
+            )
+        if len(valid) < len(upper):
+            logger.warning(
+                "num_independent_trials: %d of %d pairwise correlations are NaN "
+                "(constant-return trials?); using %d valid pairs",
+                len(upper) - len(valid), len(upper), len(valid),
+            )
+        avg_corr = float(valid.mean())
 
     if np.isnan(avg_corr):
-        logger.warning(
-            "num_independent_trials: avg_corr is NaN (constant returns?); "
-            "defaulting to 1.0 (fully correlated, N_eff=1) as conservative estimate"
+        raise ValueError(
+            "num_independent_trials: avg_corr is NaN. Cannot compute N_eff."
         )
-        avg_corr = 1.0
 
     n_eff = avg_corr + (1 - avg_corr) * m
-    return int(np.ceil(max(1, n_eff)))
+    if n_eff > m:
+        logger.debug(
+            "N_eff=%.1f > m=%d (negative avg_corr=%.3f); clamping to m",
+            n_eff, m, avg_corr,
+        )
+    n_eff = max(1, min(m, n_eff))  # clamp to [1, m]
+    return int(np.ceil(n_eff))
 
 
 def expected_maximum_sr(
@@ -348,7 +398,9 @@ def deflated_sharpe_ratio(
         DSR in [0, 1]. NaN if inputs insufficient.
     """
     if returns_selected is None:
-        return np.nan
+        raise ValueError(
+            "deflated_sharpe_ratio: 'returns_selected' is required"
+        )
     if expected_max_sr is None:
         if trials_returns is None:
             raise ValueError("Provide trials_returns or expected_max_sr")

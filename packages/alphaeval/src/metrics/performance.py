@@ -15,8 +15,15 @@ from ..transforms.returns import equity_curve
 
 logger = logging.getLogger(__name__)
 
-# Near-zero threshold for floating-point comparisons
-EPSILON = 1e-14
+__all__ = [
+    "profit_factor",
+    "win_rate_trades",
+    "expectancy",
+    "max_runup",
+    "cagr",
+    "tstat_returns",
+    "sortino_ratio",
+]
 
 
 def profit_factor(trade_pnls: pd.Series) -> float:
@@ -31,11 +38,12 @@ def profit_factor(trade_pnls: pd.Series) -> float:
     -------
     float
         Profit factor. inf if no losing trades (but gains exist);
-        NaN if empty; 0.0 if no winning trades.
+        NaN if empty or all-NaN; 0.0 if no winning trades.
     """
-    gains = trade_pnls[trade_pnls > 0].sum()
-    losses = trade_pnls[trade_pnls < 0].abs().sum()
-    if abs(losses) < EPSILON:
+    clean = trade_pnls.dropna()
+    gains = clean[clean > 0].sum()
+    losses = clean[clean < 0].abs().sum()
+    if losses < 1e-14:
         if gains > 0:
             return np.inf
         return np.nan
@@ -127,9 +135,13 @@ def cagr(
     eq = equity_curve(clean)
     terminal = eq.iloc[-1]
     if terminal <= 0:
+        logger.warning(
+            "cagr: terminal equity <= 0 (%.4f after %d periods); returning -1.0",
+            terminal, n,
+        )
         return -1.0
     years = n / periods_per_year
-    if abs(years) < EPSILON:
+    if abs(years) < 1e-14:
         return np.nan
     return float(terminal ** (1.0 / years) - 1.0)
 
@@ -153,7 +165,7 @@ def tstat_returns(returns: pd.Series) -> float:
         return np.nan
     mu = clean.mean()
     sigma = clean.std(ddof=1)
-    if abs(sigma) < EPSILON:
+    if abs(sigma) < 1e-14:
         return np.nan
     return float(mu / (sigma / np.sqrt(n)))
 
@@ -189,7 +201,7 @@ def sortino_ratio(
     excess = clean - target
     downside = np.minimum(excess, 0.0)
     downside_std = np.sqrt((downside ** 2).sum() / n)  # 1/T (population)
-    if abs(downside_std) < EPSILON:
+    if abs(downside_std) < 1e-14:
         return np.nan
     mu = excess.mean()
     return float(np.sqrt(periods_per_year) * mu / downside_std)

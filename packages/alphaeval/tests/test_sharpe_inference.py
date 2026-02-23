@@ -58,8 +58,9 @@ class TestAnnEstimatedSR:
         ann = ann_estimated_sharpe_ratio(sr=0.05, periods=252)
         assert ann == pytest.approx(0.05 * np.sqrt(252))
 
-    def test_no_args_nan(self) -> None:
-        assert np.isnan(ann_estimated_sharpe_ratio())
+    def test_no_args_raises(self) -> None:
+        with pytest.raises(ValueError, match="either 'returns' or 'sr'"):
+            ann_estimated_sharpe_ratio()
 
     def test_zero_std_returns_nan(self) -> None:
         r = pd.Series([0.01, 0.01, 0.01])  # zero std → SR is NaN
@@ -87,6 +88,32 @@ class TestSRStdev:
 
 
 # ── PSR ─────────────────────────────────────────────────────────────────────
+
+class TestSRStdevEdge:
+    def test_zero_std_with_explicit_sr_nan(self, caplog) -> None:
+        """Zero-variance returns + explicit sr → NaN skew/kurt → NaN + warning."""
+        import logging
+        r = pd.Series([0.01] * 10)
+        with caplog.at_level(logging.WARNING, logger="src.metrics.sharpe_inference"):
+            result = estimated_sharpe_ratio_stdev(r, sr=0.5)
+        assert np.isnan(result)
+        assert "skew/kurtosis NaN" in caplog.text
+
+
+class TestExpectedMaxSREdge:
+    def test_few_valid_srs_nan(self, caplog) -> None:
+        """Trials with mostly zero-std columns → few valid SRs → NaN."""
+        import logging
+        trials = pd.DataFrame({
+            "a": [0.01, 0.01, 0.01],  # zero std → SR NaN
+            "b": [0.02, 0.02, 0.02],  # zero std → SR NaN
+            "c": [0.01, -0.02, 0.03],  # valid
+        })
+        with caplog.at_level(logging.WARNING, logger="src.metrics.sharpe_inference"):
+            result = expected_maximum_sr(trials, independent_trials=2)
+        assert np.isnan(result)
+        assert "valid trial SRs" in caplog.text
+
 
 class TestPSR:
     def test_good_strategy_high_psr(self) -> None:
@@ -129,6 +156,27 @@ class TestMinTRL:
         mtrl = min_track_record_length(r, sr_benchmark=0.0)
         assert mtrl == np.inf
 
+    def test_invalid_prob_raises(self) -> None:
+        """I3 fix: prob outside (0,1) must raise ValueError."""
+        r = _make_returns()
+        with pytest.raises(ValueError, match="prob must be in"):
+            min_track_record_length(r, prob=0.0)
+        with pytest.raises(ValueError, match="prob must be in"):
+            min_track_record_length(r, prob=1.0)
+        with pytest.raises(ValueError, match="prob must be in"):
+            min_track_record_length(r, prob=-0.5)
+
+    def test_precomputed_sr_logs_debug(self, caplog) -> None:
+        """Finding #2: pre-computed sr/sr_std should log debug message."""
+        import logging
+        r = _make_returns(mu=0.001)
+        sr = estimated_sharpe_ratio(r)
+        sr_std = estimated_sharpe_ratio_stdev(r, sr=sr)
+        with caplog.at_level(logging.DEBUG, logger="src.metrics.sharpe_inference"):
+            min_track_record_length(r, sr=sr, sr_std=sr_std)
+        assert "pre-computed sr=" in caplog.text
+        assert "pre-computed sr_std=" in caplog.text
+
 
 # ── N_eff ───────────────────────────────────────────────────────────────────
 
@@ -151,7 +199,33 @@ class TestNumIndependentTrials:
     def test_from_data(self) -> None:
         trials = _make_trials()
         n = num_independent_trials(trials)
-        assert 1 <= n <= trials.shape[1] + 1  # ceil rounding can add 1
+        assert 1 <= n <= trials.shape[1]  # clamped to [1, m]
+
+    def test_all_nan_corr_raises(self) -> None:
+        """C5 fix: all pairwise correlations NaN must raise ValueError."""
+        # Single-row DataFrame → all correlations NaN
+        trials = pd.DataFrame({"a": [0.01], "b": [0.02], "c": [0.03]})
+        with pytest.raises(ValueError, match="all pairwise correlations are NaN"):
+            num_independent_trials(trials)
+
+    def test_partial_nan_corr_warns(self, caplog) -> None:
+        """C5 fix: some NaN correlations → warning + uses valid pairs."""
+        import logging
+        rng = np.random.RandomState(42)
+        trials = pd.DataFrame({
+            "a": rng.normal(0, 0.01, 100),
+            "b": rng.normal(0, 0.01, 100),
+            "constant": [0.01] * 100,  # constant → NaN corr with others
+        })
+        with caplog.at_level(logging.WARNING, logger="src.metrics.sharpe_inference"):
+            n = num_independent_trials(trials)
+        assert 1 <= n <= 3
+        assert "NaN" in caplog.text
+
+    def test_nan_avg_corr_raises(self) -> None:
+        """C5 fix: explicit NaN avg_corr must raise."""
+        with pytest.raises(ValueError, match="avg_corr is NaN"):
+            num_independent_trials(m=10, avg_corr=float("nan"))
 
 
 # ── Expected Max SR ─────────────────────────────────────────────────────────
@@ -176,10 +250,11 @@ class TestExpectedMaxSR:
         with pytest.raises(ValueError):
             expected_maximum_sr()
 
-    def test_insufficient_valid_trials_nan(self) -> None:
-        """DataFrame with 1-row trials → all per-column SRs are NaN."""
+    def test_insufficient_valid_trials_raises(self) -> None:
+        """DataFrame with 1-row trials → all corrs NaN → raises ValueError."""
         trials = pd.DataFrame({"a": [0.01], "b": [0.02], "c": [0.03]})
-        assert np.isnan(expected_maximum_sr(trials))
+        with pytest.raises(ValueError, match="all pairwise correlations are NaN"):
+            expected_maximum_sr(trials)
 
     def test_nan_trials_sr_std_nan(self) -> None:
         assert np.isnan(expected_maximum_sr(
@@ -202,8 +277,9 @@ class TestDSR:
         dsr = deflated_sharpe_ratio(trials, selected, expected_mean_sr=0.0)
         assert dsr <= psr + 1e-10  # DSR accounts for selection bias
 
-    def test_no_selected_returns_nan(self) -> None:
-        assert np.isnan(deflated_sharpe_ratio(expected_max_sr=1.0))
+    def test_no_selected_returns_raises(self) -> None:
+        with pytest.raises(ValueError, match="returns_selected"):
+            deflated_sharpe_ratio(expected_max_sr=1.0)
 
     def test_no_args_raises(self) -> None:
         r = _make_returns()

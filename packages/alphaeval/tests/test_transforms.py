@@ -27,6 +27,23 @@ class TestPriceToReturns:
         with pytest.raises(ValueError, match="method must be"):
             price_to_returns(pd.Series([1.0, 2.0]), method="bad")
 
+    def test_zero_price_inf_replaced(self, caplog) -> None:
+        """I6 fix: zero prices produce inf, replaced with NaN + warning."""
+        import logging
+        price = pd.Series([100.0, 0.0, 50.0])
+        with caplog.at_level(logging.WARNING, logger="src.transforms.returns"):
+            r = price_to_returns(price, method="simple")
+        assert not np.isinf(r).any()
+        assert "inf" in caplog.text
+
+    def test_zero_price_log_inf_replaced(self, caplog) -> None:
+        """I6 fix: zero prices in log returns also replaced."""
+        import logging
+        price = pd.Series([100.0, 0.0, 50.0])
+        with caplog.at_level(logging.WARNING, logger="src.transforms.returns"):
+            r = price_to_returns(price, method="log")
+        assert not np.isinf(r).any()
+
 
 class TestEquityCurve:
     def test_basic(self) -> None:
@@ -47,6 +64,15 @@ class TestEquityCurve:
         eq = equity_curve(returns, initial=1000.0)
         assert eq.iloc[0] == pytest.approx(1100.0)
 
+    def test_nan_warning_logged(self, caplog) -> None:
+        """I11 fix: NaN returns should produce a warning."""
+        import logging
+        returns = pd.Series([0.10, np.nan, np.nan, 0.05])
+        with caplog.at_level(logging.WARNING, logger="src.transforms.returns"):
+            equity_curve(returns)
+        assert "NaN" in caplog.text
+        assert "2 of 4" in caplog.text
+
 
 # ── Spreads ─────────────────────────────────────────────────────────────────
 
@@ -58,6 +84,15 @@ class TestDeltaSpreadBp:
         assert delta.iloc[1] == pytest.approx(10.0)   # +10bp
         assert delta.iloc[2] == pytest.approx(-15.0)   # -15bp
 
+    def test_inf_replaced_with_nan(self, caplog) -> None:
+        """Finding #6: inf values from extreme spreads replaced with NaN + warning."""
+        import logging
+        spread = pd.Series([0.0, np.inf, 0.015])
+        with caplog.at_level(logging.WARNING, logger="src.transforms.spreads"):
+            delta = delta_spread_bp(spread)
+        assert not np.isinf(delta).any()
+        assert "inf" in caplog.text
+
 
 class TestSpreadReturnProxy:
     def test_basic(self) -> None:
@@ -67,6 +102,24 @@ class TestSpreadReturnProxy:
         # r ~ -5.0 * 0.001 = -0.005
         assert r.iloc[1] == pytest.approx(-0.005)
 
+    def test_all_nan_raises(self) -> None:
+        """I10 fix: all-NaN result must raise ValueError."""
+        spread = pd.Series([0.015, 0.016])
+        # Misaligned indices → all-NaN product
+        duration = pd.Series([5.0, 5.0], index=[10, 11])
+        with pytest.raises(ValueError, match="all-NaN"):
+            spread_return_proxy(spread, duration)
+
+    def test_high_nan_pct_warns(self, caplog) -> None:
+        """I10 fix: >50% NaN produces warning."""
+        import logging
+        spread = pd.Series([0.015, 0.016, 0.017, 0.018], index=[0, 1, 2, 3])
+        duration = pd.Series([np.nan, np.nan, np.nan, 5.0], index=[0, 1, 2, 3])
+        with caplog.at_level(logging.WARNING, logger="src.transforms.spreads"):
+            spread_return_proxy(spread, duration)
+        # diff → NaN at idx 0, duration NaN at 1,2 → only idx 3 valid → >50% NaN
+        assert "NaN" in caplog.text
+
 
 class TestDv01Pnl:
     def test_basic(self) -> None:
@@ -75,6 +128,22 @@ class TestDv01Pnl:
         pnl = dv01_pnl(delta_bp, dv01)
         assert pnl.iloc[0] == pytest.approx(-5000.0)
         assert pnl.iloc[1] == pytest.approx(2500.0)
+
+    def test_all_nan_raises(self) -> None:
+        """I10 fix: all-NaN result must raise ValueError."""
+        delta_bp = pd.Series([10.0, -5.0])
+        dv01 = pd.Series([500.0, 500.0], index=[10, 11])  # misaligned
+        with pytest.raises(ValueError, match="all-NaN"):
+            dv01_pnl(delta_bp, dv01)
+
+    def test_high_nan_pct_warns(self, caplog) -> None:
+        """dv01_pnl: >50% NaN produces warning."""
+        import logging
+        delta_bp = pd.Series([10.0, -5.0, 3.0, -2.0])
+        dv01 = pd.Series([np.nan, np.nan, np.nan, 500.0])
+        with caplog.at_level(logging.WARNING, logger="src.transforms.spreads"):
+            dv01_pnl(delta_bp, dv01)
+        assert "NaN" in caplog.text
 
 
 # ── Equity analytics ────────────────────────────────────────────────────────
@@ -98,6 +167,11 @@ class TestDrawdownSeries:
         dd = drawdown_series(returns)
         assert np.isnan(dd.iloc[0])  # 0/0 → NaN
 
+    def test_empty_input(self) -> None:
+        """S8: empty returns → empty drawdown series."""
+        dd = drawdown_series(pd.Series(dtype=float))
+        assert len(dd) == 0
+
 
 class TestRunupSeries:
     def test_monotonic_down_zero_runup(self) -> None:
@@ -119,3 +193,8 @@ class TestRunupSeries:
         # eq = [0.0, 0.0], trough = [0.0, 0.0], ru = NaN (0/0)
         assert np.isnan(ru.iloc[0])
         assert np.isnan(ru.iloc[1])
+
+    def test_empty_input(self) -> None:
+        """S8: empty returns → empty runup series."""
+        ru = runup_series(pd.Series(dtype=float))
+        assert len(ru) == 0

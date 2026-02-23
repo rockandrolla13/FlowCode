@@ -32,6 +32,10 @@ class TestProfitFactor:
         pnls = pd.Series(dtype=float)
         assert np.isnan(profit_factor(pnls))  # no gains, no losses
 
+    def test_all_nan_returns_nan(self) -> None:
+        pnls = pd.Series([np.nan, np.nan, np.nan])
+        assert np.isnan(profit_factor(pnls))
+
 
 class TestWinRateTrades:
     def test_basic(self) -> None:

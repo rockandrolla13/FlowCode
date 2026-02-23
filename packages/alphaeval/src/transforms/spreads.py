@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,15 @@ def delta_spread_bp(spread: pd.Series) -> pd.Series:
     pd.Series
         Spread change in bp: (s_t - s_{t-1}) * 10_000.
     """
-    return spread.diff() * 1e4
+    result = spread.diff() * 1e4
+    n_inf = int(np.isinf(result).sum())
+    if n_inf > 0:
+        logger.warning(
+            "delta_spread_bp: %d inf values detected; replacing with NaN",
+            n_inf,
+        )
+        result = result.replace([np.inf, -np.inf], np.nan)
+    return result
 
 
 def spread_return_proxy(
@@ -51,11 +60,18 @@ def spread_return_proxy(
     """
     delta_s = spread.diff()
     result = -duration * delta_s
-    if result.notna().sum() == 0 and len(spread) > 1:
+    n_total = len(result)
+    n_valid = int(result.notna().sum())
+    if n_valid == 0 and n_total > 1:
+        raise ValueError(
+            "spread_return_proxy: result is all-NaN. Check index alignment "
+            f"between spread (len={len(spread)}) and duration (len={len(duration)})."
+        )
+    if n_total > 1 and n_valid < n_total * 0.5:
         logger.warning(
-            "spread_return_proxy: result is all-NaN; check index alignment "
-            "between spread (len=%d) and duration (len=%d)",
-            len(spread), len(duration),
+            "spread_return_proxy: %d of %d values are NaN (>50%%); "
+            "check index alignment",
+            n_total - n_valid, n_total,
         )
     return result
 
@@ -81,10 +97,16 @@ def dv01_pnl(
         P&L from spread move.
     """
     result = -dv01 * delta_bp
-    if result.notna().sum() == 0 and len(delta_bp) > 0:
+    n_total = len(result)
+    n_valid = int(result.notna().sum())
+    if n_valid == 0 and n_total > 0:
+        raise ValueError(
+            "dv01_pnl: result is all-NaN. Check index alignment "
+            f"between delta_bp (len={len(delta_bp)}) and dv01 (len={len(dv01)})."
+        )
+    if n_total > 1 and n_valid < n_total * 0.5:
         logger.warning(
-            "dv01_pnl: result is all-NaN; check index alignment "
-            "between delta_bp (len=%d) and dv01 (len=%d)",
-            len(delta_bp), len(dv01),
+            "dv01_pnl: %d of %d values are NaN (>50%%); check index alignment",
+            n_total - n_valid, n_total,
         )
     return result

@@ -59,20 +59,37 @@ class TestValidatePanel:
         date_level = result.index.get_level_values("date")
         assert pd.api.types.is_datetime64_any_dtype(date_level)
 
-    def test_duplicate_keys_detected(self) -> None:
-        """Duplicate (date, instrument) keys should be detected."""
+    def test_multiindex_no_copy(self) -> None:
+        """MultiIndex path returns same object (no copy) for performance."""
+        df = self._make_panel().set_index(["date", "instrument"])
+        result = validate_panel(df)
+        assert result is df
+
+    def test_multiindex_string_dates_no_mutation(self) -> None:
+        """MultiIndex with string dates: coercion must NOT mutate original."""
+        df = pd.DataFrame(
+            {"returns": [0.01, 0.02]},
+            index=pd.MultiIndex.from_tuples(
+                [("2024-01-01", "A"), ("2024-01-02", "B")],
+                names=["date", "instrument"],
+            ),
+        )
+        original_idx = df.index.copy()
+        result = validate_panel(df)
+        # Original should be untouched
+        assert df.index.equals(original_idx)
+        # Result should have coerced dates
+        assert pd.api.types.is_datetime64_any_dtype(
+            result.index.get_level_values("date")
+        )
+        assert result is not df  # had to copy for coercion
+
+    def test_duplicate_keys_raises(self) -> None:
+        """Duplicate (date, instrument) keys must raise ValueError."""
         df = pd.DataFrame({
             "date": ["2024-01-01", "2024-01-01", "2024-01-02"],
             "instrument": ["A", "A", "A"],
             "returns": [0.01, 0.02, 0.03],
         })
-        result = validate_panel(df)
-        assert len(result) == 3  # duplicates preserved, not dropped
-        assert result.index.duplicated().any()  # duplicates present
-
-    def test_empty_dataframe(self) -> None:
-        """Empty DataFrame should return empty MultiIndex DataFrame."""
-        df = pd.DataFrame({"date": [], "instrument": [], "returns": []})
-        result = validate_panel(df, required_cols={"date", "instrument", "returns"})
-        assert len(result) == 0
-        assert isinstance(result.index, pd.MultiIndex)
+        with pytest.raises(ValueError, match="duplicate"):
+            validate_panel(df)

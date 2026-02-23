@@ -40,20 +40,21 @@ def validate_panel(
     Raises
     ------
     ValueError
-        If required columns missing or date/instrument not found.
+        If required columns missing, date/instrument not found, or
+        duplicate (date, instrument) rows detected.
     """
-    df = data.copy()
-
-    # If MultiIndex, check level names
-    if isinstance(df.index, pd.MultiIndex):
-        names = [n for n in df.index.names if n is not None]
+    # If MultiIndex, validate level names without copying
+    if isinstance(data.index, pd.MultiIndex):
+        names = [n for n in data.index.names if n is not None]
         if date_col not in names or instrument_col not in names:
             raise ValueError(
                 f"MultiIndex must have levels '{date_col}' and "
                 f"'{instrument_col}', got {names}"
             )
+        df = data
     else:
-        # Columns → MultiIndex
+        # Columns → MultiIndex (copy needed for set_index mutation)
+        df = data.copy()
         for col in (date_col, instrument_col):
             if col not in df.columns:
                 raise ValueError(f"Column '{col}' not found in DataFrame")
@@ -63,17 +64,20 @@ def validate_panel(
     date_level = df.index.get_level_values(date_col)
     if not pd.api.types.is_datetime64_any_dtype(date_level):
         logger.info("Coercing '%s' level to datetime", date_col)
+        if df is data:  # MultiIndex passthrough — copy to avoid mutating caller
+            df = data.copy()
         df.index = df.index.set_levels(
             pd.to_datetime(df.index.levels[df.index.names.index(date_col)]),
             level=date_col,
         )
 
     # Check for duplicate (date, instrument) keys
-    if df.index.duplicated().any():
-        n_dupes = int(df.index.duplicated().sum())
-        logger.warning(
-            "validate_panel: %d duplicate (date, instrument) rows detected",
-            n_dupes,
+    dupes = df.index.duplicated()
+    if dupes.any():
+        n_dupes = int(dupes.sum())
+        raise ValueError(
+            f"validate_panel: {n_dupes} duplicate ({date_col}, {instrument_col}) "
+            "rows detected. De-duplicate before calling validate_panel."
         )
 
     # Check required columns
