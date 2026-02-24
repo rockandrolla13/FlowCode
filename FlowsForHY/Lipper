@@ -1,0 +1,56 @@
+# Replicating the JPM HY Supply/Demand Framework
+
+This is JPM's classic HY technical framework. Here's the decomposition of each line item and where to source it:
+
+## Supply Side
+
+| Line Item | Source |
+|---|---|
+| **Gross new issuance** | Bloomberg (LEAG screen), Dealogic, or LCD/PitchBook. Filter: USD HY corporate bonds, ex-144A if needed |
+| **Fallen angels** | ICE BofA or Bloomberg index rebalancing data — track IG→HY downgrades by par amount |
+| **Total Supply** | Sum of above |
+
+## Demand Side
+
+| Line Item | Source |
+|---|---|
+| **Calls** | Bloomberg (CALL screen on index constituents), or back out from index-level redemption data via ICE/BBG indices |
+| **Tenders** | Bloomberg SRCH or manually track tender offers on HY bonds; LCD tracks these |
+| **Maturities** | Straightforward — par amount of index-eligible HY bonds maturing. Pull from Bloomberg INDEX screen or ICE BofA index composition |
+| **Rising stars** | Mirror of fallen angels — HY→IG upgrades by par. Same index rebalancing data |
+| **Coupon reinvestment @ 75%** | Compute total annual coupon income on HY universe (index OAW × par outstanding), multiply by 0.75 reinvestment assumption |
+| **Mutual fund flows (AMG)** | This is the key one — see below |
+
+## The Lipper / AMG Fund Flow Data
+
+The table cites **two** overlapping sources:
+
+1. **AMG Data (now LSEG/Lipper)** — The "Mutual fund flows (AMG)" line uses **AMG Data Services** weekly/monthly fund flow data, which was acquired by Refinitiv and is now part of **LSEG Lipper Fund Flows**. The specific product is:
+
+   - **Lipper FMI (Fund Market Intelligence)** — this provides aggregated weekly and monthly net flows into/out of US HY mutual funds and ETFs. The bottom chart explicitly references this.
+
+2. To replicate, you need access to **LSEG Workspace** (formerly Refinitiv Eikon) and specifically the **Lipper Fund Flows** dataset. The relevant categories:
+   - **Lipper Classification**: High Yield Funds
+   - **Flow type**: Net new cash flow (excludes reinvested distributions)
+   - **Vehicle**: Mutual funds only (the table separates MF from ETF)
+   - **Domicile**: US
+
+   Alternatively, the **EPFR Global** dataset is a close substitute that many buyside shops use.
+
+## Practical Replication Path
+
+The cleanest approach:
+
+1. **Bloomberg terminal**: `BI CRDT` (Credit Strategy dashboard) has most of this pre-built. Also `SRCH` for calls/tenders/maturities on the HY universe.
+
+2. **Lipper via LSEG Workspace**: Query weekly HY fund flows, aggregate to annual. The Lipper API (`/funds/flows`) lets you pull programmatically if you have an LSEG Data Library license.
+
+3. **Coupon reinvestment**: Pull index-level coupon (e.g., Bloomberg HY index yield × market value), apply 75% assumption — this is JPM's standard haircut reflecting that not all coupons get reinvested back into HY.
+
+4. **Net supply/demand balance**: Simple subtraction. The key insight is that persistently negative supply surplus (shortfall) = strong technical bid, which compresses spreads independent of fundamentals.
+
+## If You Want to Automate
+
+Given your StratPipe infrastructure, you could pull most of this via Bloomberg's `blpapi` (BSRCH for bond-level call/maturity schedules, INDEX for universe composition) and supplement with Lipper flows via the LSEG Data Library Python package (`lseg.data`). The fallen angel / rising star tracking requires monitoring rating changes on the index constituency — `RATC` on Bloomberg or the Moody's/S&P SFTP feeds if you have them.
+
+Want me to sketch out a pipeline for this?
