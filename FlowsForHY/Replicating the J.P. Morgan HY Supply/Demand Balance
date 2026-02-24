@@ -1,0 +1,922 @@
+# High Yield Supply & Demand Technical Framework
+
+## Replicating the J.P. Morgan HY Supply/Demand Balance
+
+---
+
+## 1. Overview
+
+The JPM HY Supply/Demand framework is the canonical technical model for US high yield credit markets. It decomposes the annual net supply/demand balance into observable components, producing a **supply surplus/(shortfall)** metric that is one of the strongest predictors of HY spread compression/widening independent of fundamental credit quality.
+
+### Core Identity
+
+$$\text{Supply Surplus} = \text{Total Supply} - \text{Total Demand}$$
+
+Where:
+
+$$\text{Total Supply} = \text{Gross New Issuance} + \text{Fallen Angels}$$
+
+$$\text{Total Demand} = \text{Calls} + \text{Tenders} + \text{Maturities} + \text{Rising Stars} + \text{Coupon Reinvestment} + \text{Fund Flows}$$
+
+A **negative** supply surplus (i.e., shortfall) implies a net technical bid — more capital chasing fewer bonds — which historically compresses spreads.
+
+---
+
+## 2. Supply-Side Components
+
+### 2.1 Gross New Issuance
+
+**Definition**: Total par amount of newly issued USD-denominated high yield corporate bonds.
+
+**Data Sources** (ranked by preference):
+
+| Source | Product | Access Method | Granularity |
+|--------|---------|---------------|-------------|
+| Bloomberg | `LEAG` screen / BI CRDT | Terminal / BSRCH API | Deal-level |
+| Dealogic | DCM Analytics | Web / API | Deal-level |
+| LCD (PitchBook) | Leveraged Commentary & Data | Web / Excel plugin | Weekly/Monthly |
+| SIFMA | US Corporate Bond Issuance | Public CSV | Monthly |
+
+**Bloomberg BSRCH Query**:
+
+```
+BSRCH: FI:CORP
+  Currency = USD
+  Industry Sector = "High Yield"
+  Issue Date >= 2016-01-01
+  Aggregate by: Year, Sum(Amount Issued)
+```
+
+**Key Fields**:
+- `AMT_ISSUED` — Par amount at issuance
+- `ISSUE_DT` — Pricing date
+- `BB_COMPOSITE` — Rating at issuance (filter for HY: BB+/Ba1 and below)
+- `144A_FLAG` — Include 144A (standard for US HY)
+
+**Filters**:
+- Include: 144A with registration rights, SEC-registered
+- Exclude: Exchange offers, reopenings (debatable — JPM typically includes reopenings)
+- Exclude: Leveraged loans, CLO tranches, converts
+
+**Annual Aggregation**: Sum `AMT_ISSUED` by calendar year. Values should be in $bn.
+
+---
+
+### 2.2 Fallen Angels
+
+**Definition**: Investment-grade bonds downgraded to high yield (crossing the BBB-/Baa3 → BB+/Ba1 threshold) measured by par amount outstanding at time of downgrade.
+
+**Data Sources**:
+
+| Source | Product | Access Method |
+|--------|---------|---------------|
+| ICE BofA | Index rebalancing files | Monthly index reconstitution |
+| Bloomberg | `RATC` / BSRCH | Rating change screening |
+| Moody's / S&P | Rating action feeds | SFTP / API |
+| Barclays POINT | Index analytics | Client portal |
+
+**Bloomberg Approach**:
+
+```
+BSRCH: FI:CORP
+  Rating Change Direction = "Downgrade"
+  Previous Rating >= BBB- (S&P) or Baa3 (Moody's)
+  Current Rating <= BB+ (S&P) or Ba1 (Moody's)
+  Date Range: Calendar Year
+  Aggregate: Sum(Amount Outstanding)
+```
+
+**Key Fields**:
+- `RTG_SP_LT_LC_ISSUER_CREDIT` — S&P issuer rating
+- `RTG_MOODY_LT_LC_DEBT` — Moody's senior unsecured
+- `AMT_OUTSTANDING` — Par outstanding at downgrade date
+- `RTG_CHG_DT` — Date of rating action
+
+**Nuances**:
+- Use the *first* agency to downgrade to HY (not consensus)
+- JPM convention: Measure par at time of downgrade, not at next index rebalancing
+- Large idiosyncratic events dominate (e.g., Ford/GM 2005, Kraft Heinz 2020, $677.6bn spike in 2020 likely includes pandemic-era fallen angels)
+
+---
+
+## 3. Demand-Side Components
+
+### 3.1 Calls (Redemptions via Call Provisions)
+
+**Definition**: Par amount of HY bonds redeemed via issuer call provisions (make-whole calls, fixed-price calls, equity clawbacks).
+
+**Data Sources**:
+
+| Source | Product | Access Method |
+|--------|---------|---------------|
+| Bloomberg | `CALL` screen / BSRCH | Per-bond call schedule |
+| ICE BofA | Index exit reports | Monthly reconstitution |
+| LCD | Leveraged finance activity | Weekly reports |
+
+**Bloomberg Approach**:
+
+```python
+# For each bond in the HY universe:
+# 1. Check NXT_CALL_DT and CALLED_DT fields
+# 2. Filter where REDEM_TYP = "CALL" and CALLED_DT in target year
+# 3. Aggregate AMT_OUTSTANDING at call date
+```
+
+**Key Fields**:
+- `CALLED_DT` — Actual call date (if called)
+- `NXT_CALL_DT` / `CALL_SCHEDULE` — Call schedule
+- `CALL_PX` — Call price
+- `REDEM_TYP` — Redemption type
+
+**Notes**:
+- This is the largest demand-side component (~$350-480bn annually)
+- Driven by refinancing activity — correlated with new issuance but lagged
+- Must distinguish between full calls and partial calls
+
+---
+
+### 3.2 Tenders
+
+**Definition**: Par amount of HY bonds repurchased via tender offers by issuers.
+
+**Data Sources**:
+
+| Source | Product | Access Method |
+|--------|---------|---------------|
+| Bloomberg | `SRCH` / Corporate Actions | Terminal |
+| LCD | Tender offer tracker | Weekly |
+| SEC | EDGAR filings (SC TO-I) | EDGAR full-text search |
+
+**Bloomberg SRCH**:
+
+```
+Corporate Action Type = "Tender Offer"
+Security Type = Corporate Bond
+Rating = High Yield
+Date Range = Calendar Year
+```
+
+**Notes**:
+- Smaller and more volatile component ($15-230bn)
+- Often coincides with broader liability management exercises
+- Include both cash tenders and exchange offers where old bonds are retired
+
+---
+
+### 3.3 Maturities
+
+**Definition**: Par amount of HY bonds reaching stated maturity.
+
+**Data Sources**:
+
+| Source | Product | Access Method |
+|--------|---------|---------------|
+| Bloomberg | `MATURITY` field / BSRCH | Trivial to compute |
+| ICE BofA | Index maturity profile | Index analytics |
+
+**Bloomberg Approach**:
+
+```
+BSRCH: FI:CORP
+  BB_COMPOSITE in (HY ratings)
+  MATURITY >= YYYY-01-01 AND MATURITY <= YYYY-12-31
+  Aggregate: Sum(AMT_OUTSTANDING)
+```
+
+**Key Fields**:
+- `MATURITY` — Maturity date
+- `AMT_OUTSTANDING` — Outstanding par
+
+**Notes**:
+- Highly predictable (known years in advance)
+- HY bonds typically have 5-10yr maturities at issuance, so the maturity wall is visible
+- Cross-reference with amortising structures where applicable
+
+---
+
+### 3.4 Rising Stars
+
+**Definition**: Mirror of fallen angels — HY bonds upgraded to investment grade (crossing BB+/Ba1 → BBB-/Baa3).
+
+**Data Sources**: Same as fallen angels (Section 2.2), reversing the direction filter.
+
+**Bloomberg Approach**:
+
+```
+BSRCH: FI:CORP
+  Rating Change Direction = "Upgrade"
+  Previous Rating <= BB+ (S&P) or Ba1 (Moody's)
+  Current Rating >= BBB- (S&P) or Baa3 (Moody's)
+  Date Range: Calendar Year
+  Aggregate: Sum(Amount Outstanding)
+```
+
+**Notes**:
+- Removes bonds from the HY investable universe → acts as demand (absorbs supply)
+- Large rising star years (e.g., 2021: $492.6bn) dramatically tighten technicals
+- Track both Moody's and S&P — convention is first agency to upgrade
+
+---
+
+### 3.5 Coupon Reinvestment @ 75%
+
+**Definition**: Estimated annual coupon income on the HY universe, assuming 75% is reinvested back into HY.
+
+**Calculation**:
+
+$$\text{Coupon Reinvestment} = 0.75 \times \overline{C} \times \text{MV}_{\text{HY}}$$
+
+Where:
+- $\overline{C}$ = average coupon rate on the HY index
+- $\text{MV}_{\text{HY}}$ = total market value of the HY universe
+
+**Data Sources**:
+
+| Source | Field | Bloomberg Ticker |
+|--------|-------|-----------------|
+| ICE BofA US HY Index | Coupon rate, market value | `H0A0` Index |
+| Bloomberg US HY Index | Coupon rate, market value | `LF98TRUU` Index |
+
+**Bloomberg Fields**:
+- `INDX_AVG_CPN` — Average coupon
+- `INDX_MARKET_VAL` — Total market value
+- `INDX_PAR_AMT` — Total par amount
+
+**Example Calculation (illustrative)**:
+
+```
+HY Index Par Outstanding: ~$1,400bn
+Average Coupon: ~5.8%
+Annual Coupon Income: $81.2bn
+Reinvestment @ 75%: $60.9bn
+```
+
+**Notes**:
+- The 75% reinvestment rate is a JPM assumption — not directly observable
+- Rationale: ~25% of coupons go to funds experiencing outflows, insurance float, etc.
+- This is relatively stable year-to-year; varies primarily with index market value and rates
+
+---
+
+### 3.6 Mutual Fund Flows (AMG / Lipper)
+
+**Definition**: Net new cash flows into US high yield mutual funds (excluding ETFs in the table, though the chart includes both).
+
+**THIS IS THE CRITICAL DATA SOURCE TO REPLICATE**
+
+#### Primary Source: LSEG Lipper Fund Flows (formerly AMG Data / Refinitiv)
+
+| Product | Details |
+|---------|---------|
+| **Vendor** | LSEG (London Stock Exchange Group) |
+| **Product Name** | Lipper Fund Flows / Lipper FMI (Fund Market Intelligence) |
+| **Legacy Name** | AMG Data Services Weekly Fund Flows |
+| **Access** | LSEG Workspace (Eikon), Lipper API, DataScope |
+| **Frequency** | Weekly (Wednesday reporting), aggregated to monthly/annual |
+| **Coverage** | US-domiciled open-end mutual funds |
+
+#### Lipper Classification Filters
+
+```
+Lipper Global Classification: High Yield
+Fund Domicile: United States
+Fund Type: Open-End Fund (exclude ETFs for the "Mutual fund flows" line)
+Flow Metric: Estimated Net Flow (ENF)
+Exclude: Money market, institutional share class double-counting
+```
+
+#### Lipper Data Fields
+
+| Field | Description |
+|-------|-------------|
+| `FUND_FLOW_NET` | Net new cash flow ($) |
+| `FUND_FLOW_NET_PCT` | Net flow as % of AUM |
+| `TOTAL_NET_ASSETS` | AUM |
+| `LIPPER_CLASS_NAME` | "High Yield" |
+| `FUND_TYPE` | "Open-End" vs "ETF" vs "Closed-End" |
+| `REPORTING_DATE` | Weekly reporting date |
+
+#### LSEG Workspace / Eikon Path
+
+```
+Eikon: Lipper → Fund Flows → Asset Class: Fixed Income → 
+  Sub-classification: High Yield → Geography: US → 
+  Vehicle: Mutual Funds → Frequency: Weekly/Monthly/Annual
+```
+
+#### Lipper API (Python)
+
+```python
+import lseg.data as ld
+
+ld.open_session()
+
+# Query HY mutual fund flows
+flows = ld.get_data(
+    universe="LIPPER_FUND_FLOWS",
+    fields=[
+        "FUND_FLOW_NET",
+        "TOTAL_NET_ASSETS",
+        "LIPPER_CLASS_NAME",
+        "REPORTING_DATE"
+    ],
+    parameters={
+        "classification": "High Yield",
+        "domicile": "US",
+        "fund_type": "Open-End",
+        "start_date": "2016-01-01",
+        "end_date": "2023-12-31",
+        "frequency": "weekly"
+    }
+)
+
+# Aggregate to annual
+annual_flows = flows.groupby(flows['REPORTING_DATE'].dt.year)['FUND_FLOW_NET'].sum()
+```
+
+#### Alternative Source: EPFR Global
+
+| Product | Details |
+|---------|---------|
+| **Vendor** | EPFR Global (Informa Financial Intelligence) |
+| **Product Name** | EPFR Fund Flows |
+| **Access** | EPFR.com, API, Excel plugin |
+| **Frequency** | Weekly |
+| **Coverage** | Global, broader than Lipper |
+
+```
+EPFR Filter:
+  Asset Class: Fixed Income
+  Sub-type: High Yield
+  Geography: US
+  Vehicle: Mutual Funds (separate from ETFs)
+  Flow Type: Net Flows (excluding reinvested distributions)
+```
+
+#### Alternative Source: ICI (Investment Company Institute)
+
+- Free monthly data on bond fund flows (but less granular — no HY-specific breakdown)
+- URL: `https://www.ici.org/research/stats/flows`
+- Useful as a cross-check but insufficient for replication
+
+#### ETF Flows (Separate Treatment)
+
+The JPM table uses mutual fund flows only in the demand calculation, but the **chart** at the bottom ("High yield mutual funds flows, Lipper FMI") may include ETFs. For completeness:
+
+```
+Major HY ETFs to track flows:
+  HYG  — iShares iBoxx $ High Yield Corporate Bond ETF
+  JNK  — SPDR Bloomberg High Yield Bond ETF
+  USHY — iShares Broad USD High Yield Corporate Bond ETF
+  SHYG — iShares 0-5 Year High Yield Corporate Bond ETF
+
+ETF flow data available from:
+  - Bloomberg: `FUND_FLOW` field on each ETF
+  - ETF.com / ETFdb.com (free, aggregated)
+  - Lipper (same platform as MF flows)
+```
+
+---
+
+## 4. Data Validation & Cross-Checks
+
+### 4.1 Historical Benchmarks
+
+Use these known values from the JPM table to validate your pipeline:
+
+| Year | Gross Issuance ($bn) | Fallen Angels ($bn) | Total Supply ($bn) | Supply Surplus ($bn) |
+|------|---------------------|---------------------|--------------------|--------------------|
+| 2016 | 286.2 | 71.6 | 357.8 | -20.7 |
+| 2017 | 328.1 | 18.4 | 346.5 | -21.6 |
+| 2018 | 187.4 | 42.0 | 229.4 | -78.5 |
+| 2019 | 286.6 | 15.1 | 301.7 | -131.4 |
+| 2020 | 449.9 | 227.7 | 677.6 | 209.5 |
+| 2021 | 483.0 | 9.6 | 492.6 | -38.3 |
+| 2022 | 106.5 | 13.6 | 120.1 | -231.9 |
+| 2023 | 176.1 | 14.2 | 190.3 | -158.2 |
+
+### 4.2 Sanity Checks
+
+- **Gross issuance** should track LCD/SIFMA public totals within ~5%
+- **Maturities** are deterministic — should match exactly
+- **Fund flows** should directionally match EPFR and Bloomberg fund flow data
+- **Supply surplus sign** should correlate negatively with annual spread change (tighter when shortfall, wider when surplus)
+- **2020 anomaly**: Massive fallen angels ($227.7bn) + high issuance ($449.9bn) = only year with large positive surplus → spreads initially blew out then tightened as Fed backstop absorbed supply
+
+---
+
+## 5. Pipeline Architecture
+
+### 5.1 High-Level Design
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     DATA INGESTION                       │
+├──────────┬──────────┬──────────┬──────────┬─────────────┤
+│Bloomberg │  Lipper  │   LCD    │ ICE BofA │  Moody's/   │
+│  BSRCH   │  Flows   │  Issuance│  Index   │  S&P Feeds  │
+│  blpapi  │  LSEG API│  API/CSV │  FTP     │  SFTP       │
+└────┬─────┴────┬─────┴────┬─────┴────┬─────┴──────┬──────┘
+     │          │          │          │            │
+     ▼          ▼          ▼          ▼            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    RAW DATA STORE                        │
+│              (Parquet / DuckDB / PostgreSQL)             │
+│                                                         │
+│  raw_issuance/   raw_flows/   raw_ratings/   raw_index/ │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│                   TRANSFORMATION LAYER                    │
+│                                                         │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐  │
+│  │ Issuance │ │ Rating   │ │ Maturity │ │ Fund Flow │  │
+│  │ Processor│ │ Migration│ │ & Call   │ │ Aggregator│  │
+│  │          │ │ Tracker  │ │ Scheduler│ │           │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘  │
+│       │            │            │              │         │
+│       ▼            ▼            ▼              ▼         │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │            COMPONENT CALCULATOR                   │   │
+│  │  gross_issuance | fallen_angels | calls          │   │
+│  │  tenders | maturities | rising_stars             │   │
+│  │  coupon_reinvestment | fund_flows                │   │
+│  └──────────────────────┬───────────────────────────┘   │
+└─────────────────────────┼───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                   ANALYTICS & OUTPUT                     │
+│                                                         │
+│  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐ │
+│  │ Supply/Demand│  │ Time Series   │  │ Spread       │ │
+│  │ Balance Table│  │ Visualisation │  │ Regression   │ │
+│  │ (JPM replica)│  │ (Plotly/Bokeh)│  │ Analysis     │ │
+│  └──────────────┘  └───────────────┘  └──────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 5.2 Directory Structure
+
+```
+hy-supply-demand/
+├── README.md
+├── pyproject.toml
+├── config/
+│   ├── settings.yaml          # API keys, file paths, parameters
+│   └── assumptions.yaml       # Reinvestment rate, rating thresholds
+├── src/
+│   ├── __init__.py
+│   ├── ingestion/
+│   │   ├── __init__.py
+│   │   ├── bloomberg.py       # blpapi wrapper for BSRCH, INDEX, RATC
+│   │   ├── lipper.py          # LSEG Lipper fund flow pulls
+│   │   ├── ice_index.py       # ICE BofA index data
+│   │   └── lcd.py             # LCD issuance data
+│   ├── processing/
+│   │   ├── __init__.py
+│   │   ├── issuance.py        # Gross new issuance aggregation
+│   │   ├── rating_migration.py # Fallen angel / rising star tracking
+│   │   ├── redemptions.py     # Calls, tenders, maturities
+│   │   ├── coupon.py          # Coupon reinvestment calculation
+│   │   └── fund_flows.py      # Lipper/EPFR flow aggregation
+│   ├── analytics/
+│   │   ├── __init__.py
+│   │   ├── balance.py         # Supply/demand balance calculator
+│   │   ├── regression.py      # Spread vs. technical balance
+│   │   └── forecast.py        # Forward-looking projections
+│   ├── output/
+│   │   ├── __init__.py
+│   │   ├── tables.py          # JPM-style table generation
+│   │   └── charts.py          # Plotly visualisations
+│   └── utils/
+│       ├── __init__.py
+│       ├── ratings.py         # Rating scale mappings
+│       └── dates.py           # Fiscal year, rebalancing dates
+├── data/
+│   ├── raw/                   # Raw ingested data
+│   ├── processed/             # Cleaned intermediaries
+│   └── output/                # Final tables and charts
+├── notebooks/
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_validation.ipynb
+│   └── 03_spread_regression.ipynb
+└── tests/
+    ├── test_issuance.py
+    ├── test_rating_migration.py
+    └── test_balance.py
+```
+
+### 5.3 Core Pipeline Code
+
+#### `config/assumptions.yaml`
+
+```yaml
+# JPM HY Supply/Demand Framework Assumptions
+reinvestment_rate: 0.75
+
+rating_thresholds:
+  hy_ceiling_sp: "BB+"
+  hy_ceiling_moody: "Ba1"
+  ig_floor_sp: "BBB-"
+  ig_floor_moody: "Baa3"
+
+index:
+  primary: "H0A0"  # ICE BofA US HY Index
+  bloomberg: "LF98TRUU"  # Bloomberg US HY Index
+
+lipper:
+  classification: "High Yield"
+  domicile: "US"
+  fund_type: "Open-End"
+
+date_range:
+  start: "2016-01-01"
+  end: "2024-12-31"
+```
+
+#### `src/processing/rating_migration.py`
+
+```python
+"""
+Track fallen angels and rising stars by monitoring
+rating migrations across the IG/HY boundary.
+"""
+import pandas as pd
+from typing import Literal
+
+# Ordered rating scales (higher index = lower quality)
+SP_SCALE = [
+    "AAA", "AA+", "AA", "AA-", "A+", "A", "A-",
+    "BBB+", "BBB", "BBB-",  # ← IG/HY boundary
+    "BB+", "BB", "BB-", "B+", "B", "B-",
+    "CCC+", "CCC", "CCC-", "CC", "C", "D"
+]
+IG_HY_BOUNDARY_SP = SP_SCALE.index("BBB-")  # index 9
+
+
+def classify_migration(
+    prev_rating: str,
+    curr_rating: str,
+    scale: list[str] = SP_SCALE,
+    boundary: int = IG_HY_BOUNDARY_SP
+) -> Literal["fallen_angel", "rising_star", "none"]:
+    """
+    Classify a rating change as fallen angel, rising star, or neither.
+    
+    Fallen angel: prev_rating <= boundary (IG) AND curr_rating > boundary (HY)
+    Rising star:  prev_rating > boundary (HY) AND curr_rating <= boundary (IG)
+    """
+    try:
+        prev_idx = scale.index(prev_rating)
+        curr_idx = scale.index(curr_rating)
+    except ValueError:
+        return "none"
+    
+    if prev_idx <= boundary < curr_idx:
+        return "fallen_angel"
+    elif curr_idx <= boundary < prev_idx:
+        return "rising_star"
+    return "none"
+
+
+def aggregate_migrations(
+    rating_changes: pd.DataFrame,
+    direction: Literal["fallen_angel", "rising_star"],
+    freq: str = "Y"
+) -> pd.Series:
+    """
+    Aggregate par amount of fallen angels or rising stars by period.
+    
+    Parameters
+    ----------
+    rating_changes : DataFrame with columns:
+        - date: rating action date
+        - prev_rating: rating before action
+        - curr_rating: rating after action  
+        - amt_outstanding: par amount outstanding ($)
+    direction : "fallen_angel" or "rising_star"
+    freq : aggregation frequency ("Y" for annual, "Q" for quarterly)
+    
+    Returns
+    -------
+    Series indexed by period with total par migrated ($bn)
+    """
+    rating_changes = rating_changes.copy()
+    rating_changes["migration_type"] = rating_changes.apply(
+        lambda row: classify_migration(row["prev_rating"], row["curr_rating"]),
+        axis=1
+    )
+    
+    mask = rating_changes["migration_type"] == direction
+    result = (
+        rating_changes[mask]
+        .set_index("date")
+        .resample(freq)["amt_outstanding"]
+        .sum()
+        / 1e9  # Convert to $bn
+    )
+    return result
+```
+
+#### `src/processing/coupon.py`
+
+```python
+"""
+Coupon reinvestment calculation.
+
+JPM assumption: 75% of annual coupon income on the HY index
+is reinvested back into HY bonds.
+"""
+import pandas as pd
+
+
+def compute_coupon_reinvestment(
+    index_data: pd.DataFrame,
+    reinvestment_rate: float = 0.75
+) -> pd.Series:
+    """
+    Compute annual coupon reinvestment demand.
+    
+    Parameters
+    ----------
+    index_data : DataFrame with columns:
+        - date: observation date (use month-end)
+        - avg_coupon: index average coupon rate (decimal, e.g., 0.058)
+        - par_outstanding: total index par ($bn)
+    reinvestment_rate : fraction reinvested (JPM default = 0.75)
+    
+    Returns
+    -------
+    Series: annual coupon reinvestment demand ($bn)
+    
+    Notes
+    -----
+    We use the average of monthly observations within each year
+    to smooth intra-year variation in index composition.
+    
+    Coupon Reinvestment_t = reinvestment_rate × avg(C_m × Par_m) for m in year t
+    """
+    index_data = index_data.copy()
+    index_data["monthly_coupon_income"] = (
+        index_data["avg_coupon"] * index_data["par_outstanding"]
+    )
+    
+    annual = (
+        index_data
+        .set_index("date")
+        .resample("Y")["monthly_coupon_income"]
+        .mean()  # Average monthly coupon income
+        * reinvestment_rate
+    )
+    return annual
+```
+
+#### `src/processing/fund_flows.py`
+
+```python
+"""
+Fund flow aggregation from Lipper / EPFR data.
+"""
+import pandas as pd
+from pathlib import Path
+
+
+def load_lipper_flows(
+    filepath: Path,
+    classification: str = "High Yield",
+    fund_type: str = "Open-End"
+) -> pd.DataFrame:
+    """
+    Load and filter Lipper weekly fund flow data.
+    
+    Expected columns in raw file:
+        - reporting_date
+        - lipper_class
+        - fund_type (Open-End, ETF, Closed-End)
+        - net_flow ($)
+        - total_net_assets ($)
+    """
+    df = pd.read_parquet(filepath)
+    
+    mask = (
+        (df["lipper_class"] == classification) &
+        (df["fund_type"] == fund_type)
+    )
+    return df[mask].copy()
+
+
+def aggregate_annual_flows(
+    flows: pd.DataFrame,
+    date_col: str = "reporting_date",
+    flow_col: str = "net_flow"
+) -> pd.Series:
+    """
+    Aggregate weekly fund flows to annual totals ($bn).
+    """
+    flows = flows.copy()
+    flows[date_col] = pd.to_datetime(flows[date_col])
+    
+    annual = (
+        flows
+        .set_index(date_col)
+        .resample("Y")[flow_col]
+        .sum()
+        / 1e9
+    )
+    return annual
+
+
+def load_epfr_flows(filepath: Path) -> pd.DataFrame:
+    """
+    Alternative: Load EPFR Global fund flow data.
+    Similar structure, different vendor.
+    """
+    df = pd.read_csv(filepath)
+    # EPFR-specific field mapping
+    df = df.rename(columns={
+        "Date": "reporting_date",
+        "Net Flows (USD)": "net_flow",
+        "AUM (USD)": "total_net_assets"
+    })
+    return df
+```
+
+#### `src/analytics/balance.py`
+
+```python
+"""
+Supply/Demand balance calculator — the main output.
+"""
+import pandas as pd
+from dataclasses import dataclass
+
+
+@dataclass
+class SupplyDemandBalance:
+    """Annual HY supply/demand balance components."""
+    year: int
+    
+    # Supply
+    gross_issuance: float      # $bn
+    fallen_angels: float       # $bn
+    total_supply: float        # $bn
+    
+    # Demand
+    calls: float               # $bn
+    tenders: float             # $bn
+    maturities: float          # $bn
+    rising_stars: float        # $bn
+    coupon_reinvestment: float # $bn
+    fund_flows: float          # $bn
+    total_demand: float        # $bn
+    
+    # Balance
+    supply_surplus: float      # $bn (negative = shortfall = bullish)
+    
+    def __post_init__(self):
+        self.total_supply = self.gross_issuance + self.fallen_angels
+        self.total_demand = (
+            self.calls + self.tenders + self.maturities +
+            self.rising_stars + self.coupon_reinvestment + self.fund_flows
+        )
+        self.supply_surplus = self.total_supply - self.total_demand
+
+
+def build_balance_table(components: dict[str, pd.Series]) -> pd.DataFrame:
+    """
+    Assemble all components into the JPM-style balance table.
+    
+    Parameters
+    ----------
+    components : dict mapping component names to annual Series
+        Required keys: gross_issuance, fallen_angels, calls, tenders,
+                       maturities, rising_stars, coupon_reinvestment, fund_flows
+    
+    Returns
+    -------
+    DataFrame with rows = components, columns = years
+    """
+    df = pd.DataFrame(components)
+    
+    # Derived rows
+    df["total_supply"] = df["gross_issuance"] + df["fallen_angels"]
+    df["total_demand"] = (
+        df["calls"] + df["tenders"] + df["maturities"] +
+        df["rising_stars"] + df["coupon_reinvestment"] + df["fund_flows"]
+    )
+    df["supply_surplus"] = df["total_supply"] - df["total_demand"]
+    
+    # Reorder to match JPM layout
+    row_order = [
+        "gross_issuance", "fallen_angels", "total_supply",
+        "calls", "tenders", "maturities", "rising_stars",
+        "coupon_reinvestment", "fund_flows", "total_demand",
+        "supply_surplus"
+    ]
+    
+    return df[row_order].T
+
+
+def spread_regression(
+    balance: pd.DataFrame,
+    spread_changes: pd.Series
+) -> dict:
+    """
+    Regress annual HY spread changes on supply surplus
+    to quantify the technical → spread relationship.
+    
+    ΔSpread_t = α + β × SupplySurplus_t + ε_t
+    
+    Expectation: β > 0 (surplus widens, shortfall tightens)
+    """
+    import numpy as np
+    from scipy import stats
+    
+    x = balance.loc["supply_surplus"].values
+    y = spread_changes.values
+    
+    # Align on common years
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+    
+    return {
+        "beta": slope,          # bp spread change per $bn surplus
+        "alpha": intercept,
+        "r_squared": r_value**2,
+        "p_value": p_value,
+        "std_err": std_err,
+        "interpretation": (
+            f"Each $1bn of supply surplus is associated with "
+            f"{slope:.2f}bp of spread widening (R² = {r_value**2:.2f})"
+        )
+    }
+```
+
+---
+
+## 6. Data Access Checklist
+
+### Required Subscriptions
+
+| Priority | Source | Product | Approx. Annual Cost | What It Gets You |
+|----------|--------|---------|---------------------|-----------------|
+| **P0** | Bloomberg | Terminal + BSRCH | ~$25k/seat | Issuance, calls, maturities, tenders, ratings, index data |
+| **P0** | LSEG | Lipper Fund Flows (FMI) | ~$15-30k | Mutual fund flows (the AMG data) |
+| **P1** | ICE | BofA Index Data | ~$10-20k | Index composition, rebalancing, fallen angels/rising stars |
+| **P2** | LCD/PitchBook | Leveraged Finance | ~$15-25k | Cross-validation of issuance, calls |
+| **P3** | EPFR | Fund Flows | ~$10-20k | Alternative fund flow data for cross-check |
+
+### Free / Low-Cost Alternatives
+
+| Source | Coverage | Limitation |
+|--------|----------|------------|
+| FRED (St. Louis Fed) | HY index OAS, total return | No flow data |
+| SIFMA | Monthly issuance aggregates | No HY-specific split |
+| ICI | Monthly bond fund flows | Not HY-specific |
+| ETFdb.com | ETF flows (HYG, JNK) | ETFs only, no MF |
+
+---
+
+## 7. Extensions & Enhancements
+
+### 7.1 Forward Projection
+
+JPM uses this framework to project forward supply/demand:
+- **Issuance**: Model as function of spread level, maturity wall, Fed funds rate
+- **Calls**: Forecast from known call schedules + refinancing economics
+- **Maturities**: Known exactly from maturity profile
+- **Fund flows**: Harder — use trailing momentum or macro factors
+- **Rating migration**: Use credit cycle models or transition matrices
+
+### 7.2 Spread Predictive Model
+
+$$\Delta OAS_t = \alpha + \beta_1 \cdot \text{SupplySurplus}_t + \beta_2 \cdot \Delta \text{Default Rate}_t + \beta_3 \cdot \Delta \text{VIX}_t + \varepsilon_t$$
+
+The supply surplus should have incremental explanatory power beyond fundamental factors, validating the technical framework.
+
+### 7.3 Monthly / Quarterly Granularity
+
+The table shows annual data, but running at monthly frequency reveals intra-year seasonality:
+- Issuance peaks in Jan-Mar and Sep-Oct (post-earnings)
+- Fund flows are seasonal (January effect, tax-loss selling in Dec)
+- Calls cluster around semi-annual coupon dates
+
+### 7.4 Integration with Dynamic M-ELO
+
+The supply/demand balance could serve as a regime variable in the Dynamic M-ELO framework — periods of supply shortfall may exhibit different microstructure dynamics (e.g., lower effective spreads, faster mean reversion of order flow).
+
+---
+
+## 8. References
+
+- J.P. Morgan, *High Yield Market Monitor* (weekly publication)
+- J.P. Morgan, *Credit Strategy Weekly* — contains supply/demand framework updates
+- LSEG Lipper, *Fund Flows Methodology Guide*
+- ICE BofA, *US High Yield Index Methodology*
+- Fridson, M. & Garman, C., "Determinants of Spreads on New High-Yield Bonds", *Financial Analysts Journal*
+- Collin-Dufresne, P., Goldstein, R., & Martin, S., "The Determinants of Credit Spread Changes", *Journal of Finance*
+
+---
+
+*Document generated for internal use. Data sources and access methods subject to vendor terms.*
