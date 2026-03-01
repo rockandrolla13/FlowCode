@@ -36,7 +36,6 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +234,7 @@ class ResetPolicy(str, Enum):
 def _make_reset_mask(
     time_bins: np.ndarray,
     policy: ResetPolicy,
-    event_mask: Optional[np.ndarray] = None,
+    event_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Boolean array where True = reset accumulator at this index."""
     n = len(time_bins)
@@ -508,8 +507,8 @@ def intraday_spread_range(
     schema: JoinedIntradaySchema = JoinedIntradaySchema(),
     price_space: PriceSpace = PriceSpace.FV_Z_SPREAD,
     reset_policy: ResetPolicy = ResetPolicy.DAILY,
-    source: Optional[CompositeSource] = None,
-    event_mask: Optional[np.ndarray] = None,
+    source: CompositeSource | None = None,
+    event_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Running session low/high of spread/price.
 
@@ -554,8 +553,8 @@ def cumulative_spread_move(
     schema: JoinedIntradaySchema = JoinedIntradaySchema(),
     price_space: PriceSpace = PriceSpace.FV_Z_SPREAD,
     reset_policy: ResetPolicy = ResetPolicy.DAILY,
-    source: Optional[CompositeSource] = None,
-    event_mask: Optional[np.ndarray] = None,
+    source: CompositeSource | None = None,
+    event_mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Cumulative intraday spread/price move from session open.
 
@@ -629,10 +628,10 @@ def quote_staleness(
 def liquidity_filtered_universe(
     data: pd.DataFrame,
     schema: IntradayQuoteSchema = IntradayQuoteSchema(),
-    min_liquidity_score_ma: Optional[float] = None,
-    min_liquidity_score_tw: Optional[float] = None,
+    min_liquidity_score_ma: float | None = None,
+    min_liquidity_score_tw: float | None = None,
     require_both: bool = False,
-    max_bid_ask_bps: Optional[float] = None,
+    max_bid_ask_bps: float | None = None,
     source_for_ba: CompositeSource = CompositeSource.MA,
 ) -> pd.DataFrame:
     """Filter to liquid bonds using composite liquidity scores and bid-ask width."""
@@ -767,9 +766,9 @@ def spread_time_profile(
     schema: JoinedIntradaySchema = JoinedIntradaySchema(),
     price_space: PriceSpace = PriceSpace.FV_Z_SPREAD,
     reset_policy: ResetPolicy = ResetPolicy.DAILY,
-    source: Optional[CompositeSource] = None,
-    bucket_width: Optional[float] = None,
-    event_mask: Optional[np.ndarray] = None,
+    source: CompositeSource | None = None,
+    bucket_width: float | None = None,
+    event_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Mode of spread/price during session — time-weighted POC.
 
@@ -814,9 +813,9 @@ def time_at_spread(
     schema: JoinedIntradaySchema = JoinedIntradaySchema(),
     price_space: PriceSpace = PriceSpace.FV_Z_SPREAD,
     reset_policy: ResetPolicy = ResetPolicy.DAILY,
-    source: Optional[CompositeSource] = None,
-    bucket_width: Optional[float] = None,
-    event_mask: Optional[np.ndarray] = None,
+    source: CompositeSource | None = None,
+    bucket_width: float | None = None,
+    event_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Bins spent at current spread level and total session bins."""
     mid_col = _resolve_mid_col(price_space, source, schema)
@@ -855,7 +854,7 @@ def time_at_spread(
 
 def _resolve_mid_col(
     price_space: PriceSpace,
-    source: Optional[CompositeSource],
+    source: CompositeSource | None,
     schema: JoinedIntradaySchema,
 ) -> str:
     """Map (price_space, source) to column name.
@@ -885,7 +884,7 @@ def _resolve_mid_col(
         raise ValueError(f"Unknown price_space: {price_space}")
 
 
-def _bucket(value: float, width: Optional[float]) -> float:
+def _bucket(value: float, width: float | None) -> float:
     """Discretize a spread/price value into buckets."""
     if width is None or width <= 0:
         return value

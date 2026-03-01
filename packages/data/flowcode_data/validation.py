@@ -148,13 +148,19 @@ def validate_trace(
         if len(negative_volume) > 0:
             errors.append(f"Found {len(negative_volume)} negative volumes")
 
-    # Validate side
+    # Validate side — canonical values are "B" and "S" only.
+    # Downstream functions (compute_retail_imbalance, aggregate_daily_volume)
+    # filter on side == "B" / "S"; other conventions silently drop rows.
     if "side" in df.columns:
-        valid_sides = {"B", "S", "buy", "sell", "BUY", "SELL"}
-        invalid_sides = df[~df["side"].isin(valid_sides)]
-        stats["invalid_sides"] = len(invalid_sides)
-        if len(invalid_sides) > 0:
-            errors.append(f"Found {len(invalid_sides)} invalid sides")
+        valid_sides = {"B", "S"}
+        non_canonical = df[~df["side"].isin(valid_sides)]
+        stats["invalid_sides"] = len(non_canonical)
+        if len(non_canonical) > 0:
+            unique_bad = non_canonical["side"].unique().tolist()
+            errors.append(
+                f"Found {len(non_canonical)} non-canonical sides {unique_bad}; "
+                f"normalize to 'B'/'S' before processing"
+            )
 
     logger.info(f"Validated {len(df)} TRACE trades: {len(errors)} errors, {len(warnings)} warnings")
 

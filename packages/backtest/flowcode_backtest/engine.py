@@ -13,10 +13,23 @@ IMPORTANT: Lookahead Prevention Rules
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
 import pandas as pd
+
+# Enable inter-package imports (sibling packages share no pyproject.toml)
+_packages_root = Path(__file__).resolve().parents[2]
+for _sibling in ("metrics",):
+    _p = str(_packages_root / _sibling)
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from flowcode_metrics.performance import sharpe_ratio as _metrics_sharpe
+from flowcode_metrics.performance import annualized_return as _metrics_ann_return
+from flowcode_metrics.risk import max_drawdown as _metrics_max_dd
 
 from .results import BacktestResult
 from .portfolio import equal_weight
@@ -48,8 +61,8 @@ def compute_returns(
     Return at t = sum(position_{t-1} * return_t) for all assets.
     This ensures no lookahead bias.
     """
-    # Compute asset returns
-    asset_returns = prices.pct_change()
+    # Compute asset returns (avoid deprecated pct_change fill_method)
+    asset_returns = prices / prices.shift(1) - 1
 
     # Align positions and returns
     # Position at t-1 earns return at t
@@ -79,43 +92,22 @@ def compute_metrics(returns: pd.Series) -> dict[str, float]:
 
     Notes
     -----
-    Sharpe and max drawdown formulas replicate the metrics packages for
-    the default case (rf=0). Cross-package imports are not possible due
-    to shared ``src/`` namespace.
+    Delegates to ``flowcode_metrics`` for Sharpe, max drawdown, and
+    annualized return to maintain single-source formulas.
     """
     if len(returns) < 2:
         logger.warning("compute_metrics: fewer than 2 return periods, returning empty metrics")
         return {}
 
-    # Sharpe ratio — spec §3.1: μ / σ * √252, ddof=1 (rf=0 assumed)
     std = returns.std(ddof=1)
-    sharpe = float((returns.mean() / std) * np.sqrt(252)) if std > 0 else np.nan
-
-    # Max drawdown — spec §4.1: (Value - Peak) / Peak, always <= 0
-    cum_returns = (1 + returns).cumprod()
-    running_max = cum_returns.cummax()
-    drawdown = (cum_returns - running_max) / running_max
-
-    # Total return
-    total_return = float((1 + returns).prod() - 1)
-
-    # Annualized return — (1 + total)^(1/years) - 1, where years = n/252
-    n_periods = len(returns)
-    years = n_periods / 252
-    if total_return <= -1.0:
-        ann_return = np.nan
-    elif years > 0:
-        ann_return = float((1 + total_return) ** (1 / years) - 1)
-    else:
-        ann_return = np.nan
 
     return {
-        "total_return": total_return,
-        "annualized_return": ann_return,
+        "total_return": float((1 + returns).prod() - 1),
+        "annualized_return": _metrics_ann_return(returns),
         "mean_return": float(returns.mean()),
         "volatility": float(std * np.sqrt(252)),
-        "sharpe_ratio": sharpe,
-        "max_drawdown": float(drawdown.min()),
+        "sharpe_ratio": _metrics_sharpe(returns),
+        "max_drawdown": _metrics_max_dd(returns),
         "win_rate": float((returns > 0).mean()),
         "loss_rate": float((returns < 0).mean()),
         "skewness": float(returns.skew()),

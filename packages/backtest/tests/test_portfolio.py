@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.portfolio import equal_weight, risk_parity, top_n_positions
+from flowcode_backtest.portfolio import equal_weight, risk_parity, top_n_positions
 
 
 @pytest.fixture

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.triggers import (
+from flowcode_signals.triggers import (
     compute_zscore,
     zscore_trigger,
     compute_streak,

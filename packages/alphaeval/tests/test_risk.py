@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.metrics.risk import var_parametric, vpin
+from flowcode_alphaeval.metrics.risk import var_parametric, vpin
 
 
 class TestVarParametric:
@@ -100,6 +100,6 @@ class TestVpin:
         import logging
         buy = pd.Series([100, -50, 200, 150, 100])
         sell = pd.Series([50, 100, 200, 100, 200])
-        with caplog.at_level(logging.WARNING, logger="src.metrics.risk"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.metrics.risk"):
             vpin(buy, sell, n_buckets=3)
         assert "negative volume" in caplog.text

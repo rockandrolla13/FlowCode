@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from src.validation import validate_cusip, validate_trace, validate_reference
+from flowcode_data.validation import validate_cusip, validate_trace, validate_reference
 
 
 class TestValidateCusip:

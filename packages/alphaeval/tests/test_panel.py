@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.panel import validate_panel
+from flowcode_alphaeval.panel import validate_panel
 
 
 class TestValidatePanel:

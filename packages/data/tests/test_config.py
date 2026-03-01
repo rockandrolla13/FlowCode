@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.config import load_config, get_nested
+from flowcode_data.config import load_config, get_nested
 
 
 class TestLoadConfig:

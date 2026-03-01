@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.metrics.performance import (
+from flowcode_alphaeval.metrics.performance import (
     profit_factor,
     win_rate_trades,
     expectancy,

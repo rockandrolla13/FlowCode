@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.transforms.returns import price_to_returns, equity_curve
-from src.transforms.spreads import delta_spread_bp, spread_return_proxy, dv01_pnl
-from src.transforms.equity import drawdown_series, runup_series
+from flowcode_alphaeval.transforms.returns import price_to_returns, equity_curve
+from flowcode_alphaeval.transforms.spreads import delta_spread_bp, spread_return_proxy, dv01_pnl
+from flowcode_alphaeval.transforms.equity import drawdown_series, runup_series
 
 
 # ── Returns ─────────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ class TestPriceToReturns:
         """I6 fix: zero prices produce inf, replaced with NaN + warning."""
         import logging
         price = pd.Series([100.0, 0.0, 50.0])
-        with caplog.at_level(logging.WARNING, logger="src.transforms.returns"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.transforms.returns"):
             r = price_to_returns(price, method="simple")
         assert not np.isinf(r).any()
         assert "inf" in caplog.text
@@ -40,7 +40,7 @@ class TestPriceToReturns:
         """I6 fix: zero prices in log returns also replaced."""
         import logging
         price = pd.Series([100.0, 0.0, 50.0])
-        with caplog.at_level(logging.WARNING, logger="src.transforms.returns"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.transforms.returns"):
             r = price_to_returns(price, method="log")
         assert not np.isinf(r).any()
 
@@ -68,7 +68,7 @@ class TestEquityCurve:
         """I11 fix: NaN returns should produce a warning."""
         import logging
         returns = pd.Series([0.10, np.nan, np.nan, 0.05])
-        with caplog.at_level(logging.WARNING, logger="src.transforms.returns"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.transforms.returns"):
             equity_curve(returns)
         assert "NaN" in caplog.text
         assert "2 of 4" in caplog.text
@@ -88,7 +88,7 @@ class TestDeltaSpreadBp:
         """Finding #6: inf values from extreme spreads replaced with NaN + warning."""
         import logging
         spread = pd.Series([0.0, np.inf, 0.015])
-        with caplog.at_level(logging.WARNING, logger="src.transforms.spreads"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.transforms.spreads"):
             delta = delta_spread_bp(spread)
         assert not np.isinf(delta).any()
         assert "inf" in caplog.text
@@ -115,7 +115,7 @@ class TestSpreadReturnProxy:
         import logging
         spread = pd.Series([0.015, 0.016, 0.017, 0.018], index=[0, 1, 2, 3])
         duration = pd.Series([np.nan, np.nan, np.nan, 5.0], index=[0, 1, 2, 3])
-        with caplog.at_level(logging.WARNING, logger="src.transforms.spreads"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.transforms.spreads"):
             spread_return_proxy(spread, duration)
         # diff → NaN at idx 0, duration NaN at 1,2 → only idx 3 valid → >50% NaN
         assert "NaN" in caplog.text
@@ -141,7 +141,7 @@ class TestDv01Pnl:
         import logging
         delta_bp = pd.Series([10.0, -5.0, 3.0, -2.0])
         dv01 = pd.Series([np.nan, np.nan, np.nan, 500.0])
-        with caplog.at_level(logging.WARNING, logger="src.transforms.spreads"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.transforms.spreads"):
             dv01_pnl(delta_bp, dv01)
         assert "NaN" in caplog.text
 

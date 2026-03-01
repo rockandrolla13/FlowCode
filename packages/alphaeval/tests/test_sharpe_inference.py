@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.metrics.sharpe_inference import (
+from flowcode_alphaeval.metrics.sharpe_inference import (
     estimated_sharpe_ratio,
     ann_estimated_sharpe_ratio,
     estimated_sharpe_ratio_stdev,
@@ -94,7 +94,7 @@ class TestSRStdevEdge:
         """Zero-variance returns + explicit sr → NaN skew/kurt → NaN + warning."""
         import logging
         r = pd.Series([0.01] * 10)
-        with caplog.at_level(logging.WARNING, logger="src.metrics.sharpe_inference"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.metrics.sharpe_inference"):
             result = estimated_sharpe_ratio_stdev(r, sr=0.5)
         assert np.isnan(result)
         assert "skew/kurtosis NaN" in caplog.text
@@ -109,7 +109,7 @@ class TestExpectedMaxSREdge:
             "b": [0.02, 0.02, 0.02],  # zero std → SR NaN
             "c": [0.01, -0.02, 0.03],  # valid
         })
-        with caplog.at_level(logging.WARNING, logger="src.metrics.sharpe_inference"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.metrics.sharpe_inference"):
             result = expected_maximum_sr(trials, independent_trials=2)
         assert np.isnan(result)
         assert "valid trial SRs" in caplog.text
@@ -172,7 +172,7 @@ class TestMinTRL:
         r = _make_returns(mu=0.001)
         sr = estimated_sharpe_ratio(r)
         sr_std = estimated_sharpe_ratio_stdev(r, sr=sr)
-        with caplog.at_level(logging.DEBUG, logger="src.metrics.sharpe_inference"):
+        with caplog.at_level(logging.DEBUG, logger="flowcode_alphaeval.metrics.sharpe_inference"):
             min_track_record_length(r, sr=sr, sr_std=sr_std)
         assert "pre-computed sr=" in caplog.text
         assert "pre-computed sr_std=" in caplog.text
@@ -217,7 +217,7 @@ class TestNumIndependentTrials:
             "b": rng.normal(0, 0.01, 100),
             "constant": [0.01] * 100,  # constant → NaN corr with others
         })
-        with caplog.at_level(logging.WARNING, logger="src.metrics.sharpe_inference"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.metrics.sharpe_inference"):
             n = num_independent_trials(trials)
         assert 1 <= n <= 3
         assert "NaN" in caplog.text

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.diagnostics import (
+from flowcode_metrics.diagnostics import (
     hit_rate,
     autocorrelation,
     autocorrelation_profile,

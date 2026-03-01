@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.metrics.relative import tracking_error
+from flowcode_alphaeval.metrics.relative import tracking_error
 
 
 class TestTrackingError:

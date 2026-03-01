@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.performance import (
+from flowcode_metrics.performance import (
     sharpe_ratio,
     sortino_ratio,
     calmar_ratio,

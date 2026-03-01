@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.risk import (
+from flowcode_metrics.risk import (
     drawdown_series,
     max_drawdown,
     max_drawdown_duration,
@@ -217,7 +217,7 @@ class TestExpectedShortfallFallback:
 
     def test_fallback_to_var_when_tail_empty(self, monkeypatch) -> None:
         """Test ES returns VaR when no returns fall in tail."""
-        import src.risk as risk_module
+        import flowcode_metrics.risk as risk_module
 
         # Mock VaR to return a large value so -var is far below any return
         monkeypatch.setattr(risk_module, "value_at_risk", lambda *a, **kw: 100.0)

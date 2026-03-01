@@ -114,11 +114,9 @@ packages/
 ├── core/           # EXISTING LIBRARY — DO NOT MODIFY
 ├── signals/        # Thin wrappers over core
 ├── metrics/        # Performance & risk metrics
-└── backtest/       # Strategy harness
-
-Standalone modules (repo root):
-├── intraday_microstructure_analytics.py   # Intraday quote analytics (22 functions, 7 classes)
-└── intraday_quote_filters.py              # Intraday filters (16 functions, 5 schemas)
+├── backtest/       # Strategy harness
+├── alphaeval/      # Alpha evaluation (transforms, metrics, sharpe inference)
+└── intraday/       # Intraday microstructure analytics & quote filters
 ```
 
 ### Boundary Rules
@@ -275,7 +273,7 @@ Strategy harness. Orchestrates all packages.
 
 ---
 
-## Module: intraday_microstructure_analytics.py
+## Package: intraday/ (flowcode_intraday.analytics)
 
 Intraday corporate bond microstructure analytics. Combines 4 composite dealer quote sources (MA, TW, TM, CBBT) with Fincad FV model data on a 5-min (isin, time_bin) grid.
 
@@ -327,7 +325,7 @@ Intraday corporate bond microstructure analytics. Combines 4 composite dealer qu
 
 ---
 
-## Module: intraday_quote_filters.py
+## Package: intraday/ (flowcode_intraday.filters)
 
 Intraday quote and TRACE transaction filters. Extends the analytics module with event detection across 5 sections.
 

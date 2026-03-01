@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from src.reference import load_reference, enrich_with_reference
+from flowcode_data.reference import load_reference, enrich_with_reference
 
 
 class TestLoadReference:

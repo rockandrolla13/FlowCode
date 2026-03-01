@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.retail import (
+from flowcode_signals.retail import (
     qmp_classify,
     qmp_classify_with_exclusion,
     classify_trades_qmp,

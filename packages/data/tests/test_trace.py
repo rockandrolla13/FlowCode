@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from unittest.mock import patch
 
-from src.trace import load_trace, aggregate_daily_volume
+from flowcode_data.trace import load_trace, aggregate_daily_volume
 
 
 class TestLoadTrace:

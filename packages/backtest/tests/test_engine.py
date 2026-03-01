@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.engine import run_backtest, compute_returns, compute_metrics
-from src.results import BacktestResult
+from flowcode_backtest.engine import run_backtest, compute_returns, compute_metrics
+from flowcode_backtest.results import BacktestResult
 
 
 class TestComputeReturns:

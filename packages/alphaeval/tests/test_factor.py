@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.metrics.factor import (
+from flowcode_alphaeval.metrics.factor import (
     _daily_ic,
     ic_star,
     rank_ic_star,
@@ -138,7 +138,7 @@ class TestDailyIcSkipWarning:
         target = pd.DataFrame(
             np.random.randn(10, 2), index=dates, columns=instr
         )
-        with caplog.at_level(logging.WARNING, logger="src.metrics.factor"):
+        with caplog.at_level(logging.WARNING, logger="flowcode_alphaeval.metrics.factor"):
             result = _daily_ic(signal, target)
         assert result.isna().all()  # all skipped
         assert "skipped" in caplog.text

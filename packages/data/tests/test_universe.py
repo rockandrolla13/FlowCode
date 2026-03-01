@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from src.universe import (
+from flowcode_data.universe import (
     filter_ig,
     filter_hy,
     filter_by_rating,

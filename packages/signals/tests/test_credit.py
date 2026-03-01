@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.credit import (
+from flowcode_signals.credit import (
     credit_pnl,
     range_position,
     compute_range_position_rolling,

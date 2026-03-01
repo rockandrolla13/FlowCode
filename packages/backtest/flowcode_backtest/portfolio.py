@@ -113,7 +113,7 @@ def risk_parity(
     The first vol_window-1 dates always fall back (insufficient history).
     """
     # Compute rolling volatility
-    returns = prices.pct_change()
+    returns = prices / prices.shift(1) - 1
     vol = returns.rolling(window=vol_window).std()
 
     # Get position directions

@@ -48,11 +48,11 @@ from __future__ import annotations
 import logging
 import pandas as pd
 import numpy as np
-from typing import Optional, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
-from intraday_microstructure_analytics import (
+from .analytics import (
     CompositeSource,
     PriceSpace,
     IntradayQuoteSchema,
@@ -198,7 +198,7 @@ def filter_significant_offer_tightening(
     schema: IntradayQuoteSchema = IntradayQuoteSchema(),
     source: CompositeSource = CompositeSource.MA,
     min_move_bps: float = 2.0,
-    max_staleness_s: Optional[float] = 600.0,
+    max_staleness_s: float | None = 600.0,
     price_space: PriceSpace = PriceSpace.BENCHMARK_SPREAD,
 ) -> pd.DataFrame:
     """Filter for significant offer-side improvements (buying pressure).
@@ -239,7 +239,7 @@ def filter_significant_bid_widening(
     schema: IntradayQuoteSchema = IntradayQuoteSchema(),
     source: CompositeSource = CompositeSource.MA,
     min_move_bps: float = 2.0,
-    max_staleness_s: Optional[float] = 600.0,
+    max_staleness_s: float | None = 600.0,
     price_space: PriceSpace = PriceSpace.BENCHMARK_SPREAD,
 ) -> pd.DataFrame:
     """Filter for significant bid-side widening (selling pressure).
@@ -280,7 +280,7 @@ def filter_significant_quote_moves(
     source: CompositeSource = CompositeSource.MA,
     min_move_bps: float = 2.0,
     side: str = "both",
-    max_staleness_s: Optional[float] = 600.0,
+    max_staleness_s: float | None = 600.0,
     price_space: PriceSpace = PriceSpace.BENCHMARK_SPREAD,
 ) -> pd.DataFrame:
     """Filter for significant quote moves on bid, offer, or both sides.
@@ -350,7 +350,7 @@ def filter_significant_quote_moves_multi_venue(
     ),
     min_move_bps: float = 2.0,
     min_venues_confirming: int = 2,
-    max_staleness_s: Optional[float] = 600.0,
+    max_staleness_s: float | None = 600.0,
     price_space: PriceSpace = PriceSpace.BENCHMARK_SPREAD,
 ) -> pd.DataFrame:
     """Filter for significant quote moves confirmed across multiple venues.
@@ -442,7 +442,7 @@ def filter_spread_compression_events(
     schema: IntradayQuoteSchema = IntradayQuoteSchema(),
     source: CompositeSource = CompositeSource.MA,
     min_compression_bps: float = 1.0,
-    max_staleness_s: Optional[float] = 600.0,
+    max_staleness_s: float | None = 600.0,
 ) -> pd.DataFrame:
     """Filter for bid-ask spread compression events.
 
@@ -486,7 +486,7 @@ def _clean_trace(
     schema: TraceTradeSchema = TraceTradeSchema(),
     exclude_special_price: bool = True,
     exclude_corrections: bool = True,
-    max_report_delay_s: Optional[float] = None,
+    max_report_delay_s: float | None = None,
 ) -> pd.DataFrame:
     """Standard TRACE quality filters applied before any analytics.
 
@@ -520,7 +520,7 @@ def filter_trace_big_prints(
     include_dealer: bool = False,
     include_capped: bool = True,
     exclude_special_price: bool = True,
-    max_report_delay_s: Optional[float] = 3600.0,
+    max_report_delay_s: float | None = 3600.0,
 ) -> pd.DataFrame:
     """The TRUE analogue of filter_big_prints_on_ask / filter_big_prints_on_bid.
 
@@ -1311,14 +1311,14 @@ class SignalType(str, Enum):
 
 def detect_directional_pressure(
     quotes: pd.DataFrame,
-    trace_agg: Optional[pd.DataFrame] = None,
+    trace_agg: pd.DataFrame | None = None,
     schema: FullIntradaySchema = FullIntradaySchema(),
     source: CompositeSource = CompositeSource.MA,
     min_quote_move_bps: float = 2.0,
     min_trace_imbalance: float = 0.5,
     min_trace_volume: float = 500_000,
     price_space: PriceSpace = PriceSpace.BENCHMARK_SPREAD,
-    max_staleness_s: Optional[float] = 600.0,
+    max_staleness_s: float | None = 600.0,
 ) -> pd.DataFrame:
     """Unified directional pressure detection across all available data.
 
