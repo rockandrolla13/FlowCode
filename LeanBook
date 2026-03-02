@@ -1,0 +1,701 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{longtable}
+\usepackage{array}
+
+\geometry{margin=1in, top=1.2in, bottom=1.2in}
+\onehalfspacing
+
+\definecolor{navy}{RGB}{0,40,85}
+\definecolor{steel}{RGB}{70,100,130}
+\definecolor{accent}{RGB}{180,50,50}
+\definecolor{lightgray}{RGB}{245,245,245}
+
+\hypersetup{colorlinks=true, linkcolor=navy, urlcolor=steel}
+
+\titleformat{\section}{\Large\bfseries\color{navy}}{}{0em}{}[\vspace{-0.3em}\textcolor{navy}{\rule{\textwidth}{0.8pt}}]
+\titleformat{\subsection}{\large\bfseries\color{steel}}{}{0em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{steel}}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{steel}\textsc{Lean Book Construction for Bonds and Credit}}
+\fancyfoot[C]{\small\color{steel}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newtcolorbox{specbox}[1][]{
+  colback=lightgray, colframe=navy, boxrule=0.5pt,
+  fonttitle=\bfseries\color{navy}, title=#1,
+  sharp corners, left=8pt, right=8pt, top=6pt, bottom=6pt
+}
+
+\newtcolorbox{parambox}[1][]{
+  colback=blue!2, colframe=steel, boxrule=0.4pt,
+  fonttitle=\bfseries\color{steel}, title=#1,
+  sharp corners, left=8pt, right=8pt, top=5pt, bottom=5pt
+}
+
+\newtcolorbox{warnbox}[1][]{
+  colback=red!3, colframe=accent, boxrule=0.4pt,
+  fonttitle=\bfseries\color{accent}, title=#1,
+  sharp corners, left=8pt, right=8pt, top=5pt, bottom=5pt
+}
+
+\newtheorem{definition}{Definition}
+
+\begin{document}
+
+% --- Title ---
+\begin{center}
+{\Huge\bfseries\color{navy} Lean Book Construction\\[0.3em] for Bonds and Credit}\\[0.8em]
+{\large\color{steel} From Equity Foundations to Fixed Income Implementation}\\[0.5em]
+{\color{steel}\rule{0.4\textwidth}{0.4pt}}\\[0.5em]
+{\color{steel}\today \quad$\cdot$\quad Confidential}
+\end{center}
+
+\vspace{0.5em}
+\tableofcontents
+\newpage
+
+
+% ============================================================
+% PART I: FOUNDATIONS
+% ============================================================
+\part*{Part I: Foundations}
+\addcontentsline{toc}{part}{Part I: Foundations}
+
+
+% ============================================================
+\section{What a Lean Is}
+% ============================================================
+
+A lean is a trader's best estimate of the \textbf{true actionable liquidity} available for a given risk exposure at a given moment. It is not a theoretical fair value. It is not a model price. It answers a concrete question: \textit{if I needed to trade this exposure in the next 30 seconds, what price and size could I realistically get?}
+
+The word ``lean'' comes from the idea that you \textit{lean on} observable liquidity to price and hedge related instruments. You observe where something is actually trading, and you use that observation as the foundation for everything else.
+
+\begin{definition}[Lean Book]
+A synthetic order book constructed by aggregating, cleaning, and converting observable liquidity across multiple venues and related instruments into a single unified view of the price and size available for a target instrument.
+\end{definition}
+
+The lean book is the \textbf{bottom layer} of the pricing stack. Everything else --- inventory management, alpha signals, client-specific adjustments --- sits on top. Get the lean wrong and everything downstream is wrong.
+
+
+% ============================================================
+\section{The Lean in Equities: The Clean Case}
+% ============================================================
+
+To understand the lean in bonds, start with the version that works cleanly in equities.
+
+\subsection{Same-Instrument Lean: Collapsing Venues}
+
+Consider NVDA. It trades on 10 lit exchanges and multiple dark venues. Each exchange shows an order book. But these 10 books do not all reflect the same ``real'' liquidity:
+
+\begin{itemize}[leftmargin=2em]
+  \item Some displayed size is from toxic market makers who will cancel before you can hit them.
+  \item Each venue charges different take/make fees, so a \$185.00 bid on Exchange A has different economics than \$185.00 on Exchange B.
+  \item Some price levels are too small to lean on --- a 100-share bid at \$185.01 is noise.
+\end{itemize}
+
+The lean book for NVDA collapses these 10 books into a single synthetic book by:
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Filtering} out price levels below a minimum size threshold.
+  \item \textbf{Weighting} each venue's displayed size by a reliability factor (e.g., 0.8 if you estimate 20\% of liquidity is toxic and will fade).
+  \item \textbf{Fee-adjusting} every price level to reflect the true economic cost of trading there.
+  \item \textbf{Combining} the adjusted levels into a single depth-of-book.
+\end{enumerate}
+
+The result is a synthetic book that represents \textit{what you can actually trade}, not what the market displays.
+
+\subsection{Cross-Instrument Lean: Pricing Related Assets}
+
+This is where the lean becomes powerful. Once you have NVDA's lean book, you can price any instrument that shares the same risk exposure:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{NVDL} (2$\times$ leveraged NVDA ETF): quote it off the NVDA lean via $\text{NVDL} = 2 \times \text{NVDA} + \text{constant}$.
+  \item \textbf{SPY, IVV, VOO} (all track the S\&P 500): each is a lean source for the others. Quote SPY by leaning on IVV and VOO.
+\end{itemize}
+
+The workflow is:
+
+\begin{enumerate}[leftmargin=2em]
+  \item Observe the lean (liquid instrument's true actionable price).
+  \item Convert to the target instrument via a known relationship.
+  \item Quote the target off the converted lean.
+  \item Get filled.
+  \item Immediately hedge by trading the lean instrument.
+  \item Capture the spread between your fill and your hedge.
+\end{enumerate}
+
+In equities, this works cleanly because the conversion is nearly perfect: SPY and IVV hold the same basket, so $Y = \beta X + c$ with $\beta$ known precisely and $c$ stable. The residual risk is tiny. You are essentially arbitraging a pricing dislocation between fungible instruments.
+
+\subsection{The Equity Lean Stack}
+
+The full pricing stack for an equity market maker:
+
+\begin{verbatim}
+  Layer 0:  Raw exchange books (10 venues for NVDA)
+  Layer 1:  Clean each book (filter, weight, fee-adjust)
+  Layer 2:  Collapse into a single lean book (same-instrument)
+  Layer 3:  Price related instruments off the lean (cross-instrument)
+  ---- above is the "lean" ----
+  Layer 4:  Inventory lean (shade quotes to manage position)
+  Layer 5:  Alpha signal (directional skew)
+  ---- layers 4-5 are separate adjustments on top ----
+\end{verbatim}
+
+This document is about Layers 0--3: how to construct the lean itself. Layers 4--5 are covered in the companion strategy document.
+
+
+% ============================================================
+\section{Translating to Fixed Income}
+% ============================================================
+
+Every concept in the equity lean has a bond-market analogue, but each analogue is harder. This section maps them one by one and identifies where the translation breaks.
+
+\subsection{Venue $\to$ Data Source}
+
+In equities, a ``venue'' is a lit exchange with a visible, real-time order book. In bonds, there are no continuous order books for most names. The analogues are:
+
+\begin{table}[h!]
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{4cm}p{4cm}p{4.5cm}@{}}
+\toprule
+\textbf{Equity Concept} & \textbf{Bond Analogue} & \textbf{Key Difference} \\
+\midrule
+Lit exchange book & TRACE prints & Historical (delayed), not live \\
+& Composite quotes (CP+) & Indicative, smoothed, not firm \\
+& Own RFQ responses & Real competitive prices, but sparse \\
+& Dealer axes/runs & Directional signal, not firm \\
+NBBO (best bid/offer) & No equivalent & No consolidated live quote \\
+Real-time depth & No equivalent & Must be inferred from sparse data \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The fundamental difference: in equities, you can \textit{see} the liquidity continuously. In bonds, you must \textit{infer} it from irregular, delayed, and incomplete observations.
+
+\subsection{Fee Adjustment $\to$ Side and Spread Correction}
+
+In equities, you adjust for venue fees (a fraction of a cent per share). In bonds, the analogue is correcting for the bid-ask spread embedded in observed transactions. A TRACE customer-buy print is a transaction at the dealer's offer, not at mid. To estimate mid, you must subtract the half-spread --- but the half-spread itself is uncertain, varies by bond, size, and market conditions, and is not directly observable.
+
+\subsection{Toxic Liquidity Filtering $\to$ Staleness and Reliability Weighting}
+
+In equities, you filter out toxic MMs who will cancel. In bonds, the analogue is weighting observations by freshness and reliability. A 3-hour-old TRACE print is ``stale liquidity'' --- it tells you where the bond traded, but not where it trades now. A composite quote that hasn't been updated in 2 minutes is suspect. Each observation gets a reliability weight that decays with age and varies by source quality.
+
+\subsection{Cross-Instrument Lean $\to$ The Hard Part}
+
+In equities, SPY $\leftrightarrow$ IVV is a nearly perfect conversion. In bonds, the cross-instrument relationships are:
+
+\begin{table}[h!]
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{4cm}p{4cm}p{4.5cm}@{}}
+\toprule
+\textbf{Equity Analogue} & \textbf{Bond Relationship} & \textbf{Residual Risk} \\
+\midrule
+SPY $\leftrightarrow$ IVV (fungible) & On-the-run $\leftrightarrow$ off-the-run (same issuer, same maturity) & Small: liquidity premium difference \\
+SPY $\leftrightarrow$ SPXL (leveraged) & Bond $\leftrightarrow$ CDS (same credit risk) & Medium: funding basis, delivery option \\
+SPY $\leftrightarrow$ QQQ (correlated) & Bond $\leftrightarrow$ credit ETF (sector exposure) & Large: single-name vs.\ portfolio \\
+--- & 5Y bond $\leftrightarrow$ 10Y bond (same issuer) & Medium: curve risk, liquidity diff \\
+--- & Senior $\leftrightarrow$ sub bond (same issuer) & Very large: capital structure risk \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The key insight: in equities, the conversion residual is negligible (basis points of basis points). In bonds, the conversion residual is often the same order of magnitude as the bid-ask spread you're trying to capture. This means the cross-instrument lean in bonds is structurally noisier, and the lean must carry explicit uncertainty estimates.
+
+\subsection{Price Space $\to$ Spread Space}
+
+This is the deepest difference and the one with no equity analogue.
+
+In equities, aggregation happens in price space because a dollar is a dollar --- there are no coupon, maturity, or optionality effects distorting the price. A share of NVDA at \$185 on Exchange A and \$185 on Exchange B is the same thing.
+
+In bonds, dollar price is a nonlinear, time-varying function of the underlying credit spread. Two bonds at the same spread can have very different prices due to coupon differences. A bond's price changes overnight from carry and pull-to-par even if its spread hasn't moved. Convexity means that a 10bp spread widening moves the price differently than a 10bp tightening.
+
+Therefore: \textbf{the lean must aggregate in spread space, not price space.} All observations are converted to spread (Z-spread, OAS, or hazard rate) before cleaning or weighting. The conversion back to price happens only at the final step, using the target bond's specific analytics. This separation ensures that coupon, maturity, optionality, and time effects are handled correctly.
+
+\subsection{Summary: The Translation}
+
+\begin{specbox}[The Bond Lean in One Sentence]
+Collect every observable data point about a bond's credit spread --- from TRACE, RFQ platforms, CDS, ETFs, and related bonds --- convert each to spread, clean and weight by freshness and reliability, aggregate into a single best estimate, and convert to price only when quoting a specific bond using that bond's own analytics.
+\end{specbox}
+
+
+% ============================================================
+% PART II: CONSTRUCTION
+% ============================================================
+\newpage
+\part*{Part II: Construction}
+\addcontentsline{toc}{part}{Part II: Construction}
+
+
+% ============================================================
+\section{The Lean Space}\label{sec:space}
+% ============================================================
+
+All aggregation operates in one of three spread representations, chosen per bond based on instrument availability:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Lean Space} & \textbf{When to Use} & \textbf{Why} \\
+\midrule
+Z-spread & Bullet bonds without liquid CDS & Simplest; no optionality or CDS to reconcile \\
+OAS & Callable bonds & Strips out the call option value \\
+Hazard rate & Any name with liquid CDS & Natural common currency between CDS and cash \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Why spread, not price.} A spread observation from 2 hours ago is still a valid credit observation --- the issuer's credit risk hasn't been contaminated by the passage of time, carry, or rates movement. A \textit{price} observation from 2 hours ago is stale because the benchmark curve has moved, accrued interest has changed, and pull-to-par has advanced. Working in spread space eliminates an entire category of time-adjustment errors.
+
+\textbf{Conversion to price} happens once, at the moment of quoting, using the target bond's own coupon schedule, maturity, call structure, day count, and the current benchmark curve. This is where all the bond-specific complexity lives --- and it's handled by a standard bond pricer, not by the lean engine.
+
+
+% ============================================================
+\section{Data Sources and Their Information Content}\label{sec:sources}
+% ============================================================
+
+\subsection{Source Hierarchy}
+
+When all sources are fresh, the typical reliability ordering is:
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Own RFQ fills/responses.} Direct, competitive, firm prices. Highest quality but sparse.
+  \item \textbf{TRACE prints $<$15 min old.} Realized transactions. High quality but one-sided (bid or offer, not mid), size-capped, and delayed.
+  \item \textbf{CDS quotes.} Continuous, dealer-to-dealer market. Tight basis for liquid names, but the CDS--bond basis is itself uncertain and regime-dependent.
+  \item \textbf{Related bond leans} (same issuer, adjacent maturity). Informative when the source bond is liquid. Requires a structured conversion with multiple adjustment terms.
+  \item \textbf{Composite quotes} (CP+, Ai-Price). Aggregated dealer indications. Smoothed, potentially stale, indicative not firm.
+  \item \textbf{ETF-derived lean.} High frequency (exchange-traded) but wide conversion residual. Best as a directional anchor, not a precision price.
+  \item \textbf{Dealer axes/runs.} Directional signal only. Not suitable as a price anchor.
+\end{enumerate}
+
+This ordering \textbf{inverts} when same-bond data goes stale. If the last TRACE print is 3 hours old but CDS is live, CDS dominates the lean. The weighting system must handle this dynamically.
+
+
+% ============================================================
+\section{Cleaning Each Source}\label{sec:cleaning}
+% ============================================================
+
+Every raw observation is transformed into a \textbf{mid-spread estimate with a reliability weight}. The cleaning differs by source type.
+
+\subsection{TRACE Prints}
+
+TRACE data has specific biases that must be corrected before use.
+
+\textbf{Capped sizes.} FINRA disseminates trade size capped at \$5MM (IG) and \$1MM (HY). A reported \$5MM+ trade could be \$5MM or \$50MM. Use an expected-size correction: $\mathbb{E}[s \mid s \geq s_{\text{cap}}] \approx 2.5 \times s_{\text{cap}}$ (calibrate from uncapped data if available). Feed the corrected size into the half-spread model.
+
+\textbf{Side correction.} A customer-buy print is at the offer. Convert to mid-spread by adding the half-spread (in spread space, adding half-spread widens the spread, which is the direction from offer toward mid):
+
+\begin{equation}
+\hat{s}_{\text{mid}} = s_{\text{print}} + \text{side} \times \hat{h}_{\mathcal{R}}(\text{corrected\_size})
+\end{equation}
+
+where $\text{side} = -1$ for customer-buy (print is at tighter spread / offer), $+1$ for customer-sell (print is at wider spread / bid). $\hat{h}_{\mathcal{R}}$ is the half-spread model specific to the bond's liquidity regime (Section~\ref{sec:liquidity}).
+
+\textbf{Flow pressure correction.} TRACE prints are not independent draws from a distribution centered on mid. If the last 5 prints are all customer-sells, the sell-prints are likely at wider-than-equilibrium spreads (the street is being forced to buy and is charging for it). Apply a conditional correction:
+
+\begin{equation}
+\hat{s}_{\text{adj}} = \hat{s}_{\text{mid}} - \delta_{\text{pressure}} \times \text{side} \times \hat{h}
+\end{equation}
+
+where $\delta_{\text{pressure}} \in [0, 0.3]$ is estimated from the recent directional imbalance in the TRACE tape (trailing buy/sell ratio, same-side clustering, corroborating CDS/ETF direction).
+
+\textbf{Staleness weighting.} Spread observations decay in value with age:
+
+\begin{equation}
+w_{\text{age}} = \exp\!\left(-\frac{(t - t_k) \ln 2}{\tau_{\text{trace}}}\right)
+\end{equation}
+
+with $\tau_{\text{trace}} = 30$ min for IG, 60 min for HY. Hard cutoff at 4 hours (after which the print contributes zero).
+
+\textbf{Size weighting.} Larger trades are more informative: $w_{\text{size}} = (s / s_{\text{ref}})^{0.4}$, using corrected size for capped prints.
+
+\textbf{Noise inflation.} TRACE does not report dealer identity. Some fraction of prints represent off-market or relationship trades. Inflate the observation noise by $1.3\times$ to account for this.
+
+\textbf{Final weight:} $w = w_{\text{age}} \times w_{\text{size}} \times \omega_{\text{trace}}$ where $\omega_{\text{trace}}$ is the source base weight.
+
+
+\subsection{Composite Quotes}
+
+\begin{enumerate}[leftmargin=2em]
+  \item Convert bid/ask prices to bid/ask spreads using the bond's analytics and current curve.
+  \item Compute mid-spread: $s_{\text{comp}} = (s_{\text{bid}} + s_{\text{offer}}) / 2$.
+  \item De-lag: $\hat{s} = s_{\text{comp}} + \beta_{\text{delag}} \times (s_{\text{comp}} - s_{\text{comp,prev}})$, where $\beta_{\text{delag}} \approx 0.3$ (calibrated from composite-vs-next-fill regressions).
+  \item Assign weight: $w = \omega_{\text{composite}} \times \mathbb{1}[\text{age} < 120\text{s}]$.
+\end{enumerate}
+
+
+\subsection{Own RFQ History}
+
+Convert fills to spread. Apply the same side/half-spread correction as TRACE. Assign high base weight ($\omega_{\text{rfq}} = 0.9$) because these are competitive, firm prices. Age-weight with a shorter halflife ($\tau = 20$ min) since RFQ data reveals the live competitive landscape.
+
+
+\subsection{CDS Quotes}
+
+CDS is natively in spread. If operating in hazard-rate space, convert: $h = s_{\text{cds}} / (1 - R)$.
+
+The bond's spread differs from CDS by the \textbf{basis}:
+\begin{equation}
+\hat{s}_{\text{bond}} = s_{\text{cds}} + \hat{b}(t)
+\end{equation}
+
+Initialize the basis from the most recent same-bond observation: $\hat{b}(t_0) = s_{\text{bond,last}} - s_{\text{cds}}(t_0)$. As the observation ages, decay the basis toward its long-run estimate:
+\begin{equation}
+\hat{b}(t) = \hat{b}(t_0) \cdot e^{-\kappa_b (t - t_0)} + \bar{b} \cdot (1 - e^{-\kappa_b(t - t_0)})
+\end{equation}
+
+Assign weight using the regime-conditional conversion uncertainty (Section~\ref{sec:basis}).
+
+
+\subsection{Related Bonds (Same Issuer)}
+
+For a source bond $X$ with a fresh lean, estimate the target bond $Y$'s spread via:
+\begin{equation}
+\hat{s}_Y = s_X + \Delta_{\text{curve}} + \Delta_{\text{senior}} + \Delta_{\text{call}} + \Delta_{\text{liq}} + \Delta_{\text{struct}}
+\end{equation}
+
+Each adjustment term is described in Section~\ref{sec:hetero}. Assign weight inversely proportional to the conversion uncertainty, which increases with the number of active adjustment terms and the magnitude of each.
+
+
+\subsection{ETF-Derived Lean}
+
+Compute the implied spread change from the ETF return since the last known same-bond observation:
+\begin{equation}
+\Delta \hat{s}_Y = -\frac{\beta_{Y,\text{etf}} \times \Delta P_{\text{etf}}}{\text{DV01}_Y}
+\end{equation}
+
+Apply to last known spread: $\hat{s}_Y = s_{Y,\text{last}} + \Delta \hat{s}_Y$. Assign low weight (wide conversion residual: 5--15bps IG, 15--40bps HY).
+
+
+% ============================================================
+\section{Bond Heterogeneity: The Conversion Model}\label{sec:hetero}
+% ============================================================
+
+When leaning from one bond to another by the same issuer, the conversion is \textbf{not} a simple additive offset. Bonds differ along six dimensions, each requiring explicit treatment:
+
+\begin{equation}
+\boxed{\;\hat{s}_Y = s_X + \Delta_{\text{curve}}(T_X, T_Y) + \Delta_{\text{senior}} + \Delta_{\text{call}} + \Delta_{\text{liq}} + \Delta_{\text{struct}} + \epsilon\;}
+\end{equation}
+
+\textbf{Term structure} $\Delta_{\text{curve}}$: the spread difference between the source and target maturity points on the issuer's credit curve. Estimated from the CDS term structure (if liquid), historical bond-vs-bond differentials, or the average curve shape for the rating/sector cohort.
+
+\textbf{Seniority} $\Delta_{\text{senior}}$: senior unsecured vs.\ subordinated vs.\ secured. Estimated from cross-sectional lookup by rating and seniority. In distress, this term dominates and becomes highly unstable --- the capital structure trades on recovery, not spread.
+
+\textbf{Optionality} $\Delta_{\text{call}}$: callable vs.\ bullet, par call vs.\ make-whole. Computed from the OAS model. Make-whole provisions are less valuable to the issuer, so the adjustment is smaller.
+
+\textbf{Liquidity} $\Delta_{\text{liq}}$: on-the-run premium, index-eligibility effect, ETF inclusion, issue-size effect. See Section~\ref{sec:liquidity}.
+
+\textbf{Structural} $\Delta_{\text{struct}}$: covenant differences, repo specialness, currency/jurisdiction effects. Estimated from cross-sectional regressions, updated infrequently.
+
+\textbf{Residual} $\epsilon$: everything else. The standard deviation of $\epsilon$ is the conversion uncertainty and directly determines the lean weight for this source.
+
+\begin{warnbox}[When to Disable Cross-Bond Leans]
+\begin{itemize}[leftmargin=2em]
+  \item Source and target differ in seniority: reduce weight 50--70\%.
+  \item Issuer in distress (CDS $>$ 500bps): capital structure trades on recovery. All cross-bond relationships break. Disable.
+  \item Maturity difference $>$10Y: curve extrapolation is unreliable. Reduce weight 40--60\%.
+\end{itemize}
+\end{warnbox}
+
+
+% ============================================================
+\section{Liquidity Regimes}\label{sec:liquidity}
+% ============================================================
+
+Liquidity in credit is clustered, not continuous. A single half-spread model is insufficient. The half-spread depends on the bond's position in a multi-dimensional liquidity landscape:
+
+\textbf{On-the-run vs.\ off-the-run.} The most recently issued bond at a given maturity point trades dramatically tighter and more liquid. When a new bond is issued, the previous one widens by 5--20bps overnight.
+
+\textbf{Index-eligible vs.\ non-eligible.} Bonds in major indices (Bloomberg US Agg, Bloomberg IG Corporate) receive forced demand from index trackers. They trade 3--10bps tighter and 2--3$\times$ higher volume.
+
+\textbf{ETF inclusion.} Bonds held by LQD, HYG, etc.\ have additional liquidity from the AP creation/redemption mechanism.
+
+\textbf{New issue vs.\ seasoned.} Newly issued bonds ($<$30 days) have elevated volume. After 30--90 days, volume drops 70--90\%.
+
+\textbf{Issue size.} Bonds with $<$\$300MM outstanding are structurally illiquid. The relationship between size and cost is nonlinear.
+
+Each bond is assigned a \textbf{liquidity regime} $\mathcal{R}(i)$ based on these features, and the half-spread model is fitted separately per regime:
+
+\begin{equation}
+\hat{h}_{\mathcal{R}}(s, \sigma_t) = h_{0,\mathcal{R}} + h_{s,\mathcal{R}} \cdot s^{0.4} + h_{\sigma,\mathcal{R}} \cdot \sigma_t
+\end{equation}
+
+where $s$ is trade size and $\sigma_t$ is current market volatility (MOVE index). The concave power on size ($s^{0.4}$) reflects the empirical sublinear relationship between size and execution cost.
+
+
+% ============================================================
+\section{Basis Risk and Tail Behavior}\label{sec:basis}
+% ============================================================
+
+Every cross-instrument lean carries basis risk: the conversion residual between the source and target instrument. In equities, this residual is negligible. In bonds, it is material and \textbf{non-Gaussian, negatively skewed, and regime-dependent}.
+
+\subsection{Why Gaussian Is Dangerous}
+
+The CDS--bond basis, ETF tracking error, and cross-bond spreads all exhibit:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Fat tails.} Blowouts are much larger and more frequent than a Gaussian predicts.
+  \item \textbf{Asymmetry.} In stress, bases \textit{widen} (CDS--bond basis becomes more negative, ETFs trade at discount). The blowout is directional.
+  \item \textbf{Clustering.} Large moves beget large moves. Basis volatility is persistent.
+  \item \textbf{Correlation.} All bases blow out simultaneously in stress (driven by common funding/balance sheet shocks), exactly when you need the lean most.
+\end{itemize}
+
+\subsection{Basis Model}
+
+Use either a \textbf{regime-switching Gaussian} or a \textbf{Student-$t$ with GARCH dynamics}:
+
+\textbf{Option 1: Regime-switching.}
+\begin{equation}
+\epsilon(t) \mid r_t \sim \begin{cases}
+\mathcal{N}(\mu_{\text{calm}}, \sigma^2_{\text{calm}}) & r_t = \text{calm} \\
+\mathcal{N}(\mu_{\text{stress}}, \sigma^2_{\text{stress}}) & r_t = \text{stressed}
+\end{cases}
+\end{equation}
+
+with $\sigma_{\text{stress}} \approx 3$--$5 \times \sigma_{\text{calm}}$ and $\mu_{\text{stress}} > 0$ (directional blowout). The regime probability is driven by observable indicators:
+\begin{equation}
+P(\text{stress} \mid \mathbf{z}_t) = \sigma\!\left(\beta_0 + \beta_{\text{MOVE}} \cdot \text{MOVE} + \beta_{\text{VIX}} \cdot \text{VIX} + \beta_{\text{CDX}} \cdot \text{CDX.IG} + \beta_{\text{QE}} \cdot \mathbb{1}[\text{quarter-end}]\right)
+\end{equation}
+
+\textbf{Option 2: Student-$t$ / GARCH.}
+\begin{equation}
+\epsilon(t) \sim t_\nu(\mu(t), \sigma^2(t)), \qquad \sigma^2(t) = \omega + \alpha \epsilon^2(t-1) + \beta \sigma^2(t-1) + \gamma \cdot \text{MOVE}_t
+\end{equation}
+
+with $\nu \approx 3$--$6$ (fat tails), capturing volatility clustering and stress dependence.
+
+\subsection{Impact on Lean Weights}
+
+The lean weight for any cross-instrument source uses the \textbf{current regime-conditional} variance:
+\begin{equation}
+w_s(t) = \omega_{\text{base},s} \times w_{\text{freshness}} \times \frac{1}{1 + (\sigma_{\text{conv},s}(t) / \sigma_{\text{ref}})^2}
+\end{equation}
+
+In calm markets, $\sigma_{\text{conv}} \approx 2$bps and the weight is high. In stress, $\sigma_{\text{conv}} \approx 15$bps and the weight collapses. Additionally, enforce a hard cap: the total weight from cross-instrument sources cannot exceed $\theta_{\text{cross,max}}(r_t)$ (0.8 in calm, 0.5 in stress).
+
+
+% ============================================================
+% PART III: THE RECIPE
+% ============================================================
+\newpage
+\part*{Part III: The Recipe}
+\addcontentsline{toc}{part}{Part III: The Recipe}
+
+% ============================================================
+\section{Building the Lean: Step by Step}\label{sec:recipe}
+% ============================================================
+
+You are pricing bond $Y$ at time $t$. This is the procedure.
+
+\subsection{Step 1: Choose the Lean Space}
+
+\begin{verbatim}
+  if CDS_liquid(issuer):     lean_space = hazard_rate
+  elif Y.is_callable:        lean_space = OAS
+  else:                       lean_space = z_spread
+\end{verbatim}
+
+All subsequent operations happen in this space.
+
+\subsection{Step 2: Gather and Clean Same-Bond Sources}
+
+For each direct observation of $Y$ (TRACE prints, composite quotes, own RFQ history):
+
+\begin{enumerate}[leftmargin=2em]
+  \item Convert the raw observation (price) to spread using $Y$'s analytics and the current benchmark curve.
+  \item Apply source-specific corrections (side/half-spread, flow pressure, capped size, de-lagging).
+  \item Assign a reliability weight (age decay $\times$ size weight $\times$ source base weight).
+\end{enumerate}
+
+The output is a set of cleaned mid-spread estimates with weights: $\{(\hat{s}_k, w_k)\}_{\text{same-bond}}$.
+
+\subsection{Step 3: Gather and Clean Cross-Instrument Sources}
+
+For each indirect source (CDS, related bonds, ETFs):
+
+\begin{enumerate}[leftmargin=2em]
+  \item Obtain the source instrument's current spread (from its own lean or live data).
+  \item Apply the conversion model to estimate $Y$'s spread (basis model for CDS, structured conversion for related bonds, beta/DV01 mapping for ETFs).
+  \item Compute the regime-conditional conversion uncertainty $\sigma_{\text{conv}}(t)$.
+  \item Assign a reliability weight that decreases as conversion uncertainty increases.
+\end{enumerate}
+
+The output is a set of converted spread estimates with weights: $\{(\hat{s}_k, w_k)\}_{\text{cross-instr}}$.
+
+\subsection{Step 4: Aggregate in Spread Space}
+
+\begin{enumerate}[leftmargin=2em]
+  \item Combine all sources: $\{(\hat{s}_k, w_k)\} = \text{same-bond} \cup \text{cross-instr}$.
+  \item Enforce the cross-instrument weight cap: if cross-instrument weight exceeds $\theta_{\text{cross,max}}(r_t)$ of total, rescale down.
+  \item Compute the lean mid-spread:
+  \begin{equation}
+  s_{\text{lean}} = \frac{\sum_k w_k \cdot \hat{s}_k}{\sum_k w_k}
+  \end{equation}
+  \item Compute source disagreement:
+  \begin{equation}
+  \sigma_{\text{lean}} = \sqrt{\frac{\sum_k w_k (\hat{s}_k - s_{\text{lean}})^2}{\sum_k w_k}}
+  \end{equation}
+\end{enumerate}
+
+\subsection{Step 5: Build the Lean Bid/Offer in Spread Space}
+
+Using the regime-specific half-spread model for bond $Y$ at the target trade size:
+
+\begin{align}
+s_{\text{lean}}^{\text{bid}} &= s_{\text{lean}} + \hat{h}_{\mathcal{R}(Y)}(\text{size}) + \psi \cdot \sigma_{\text{lean}} \\
+s_{\text{lean}}^{\text{offer}} &= s_{\text{lean}} - \hat{h}_{\mathcal{R}(Y)}(\text{size}) - \psi \cdot \sigma_{\text{lean}}
+\end{align}
+
+In spread space: bid = wider spread = lower price. The $\psi \cdot \sigma_{\text{lean}}$ term widens the spread when sources disagree.
+
+\subsection{Step 6: Convert to Price}
+
+This is the \textbf{only} place bond-specific analytics are applied:
+
+\begin{align}
+P_{\text{lean}}^{\text{bid}} &= \text{PriceFromSpread}(s_{\text{lean}}^{\text{bid}},\; Y,\; \text{curve}(t),\; \text{vol}(t)) \\
+P_{\text{lean}}^{\text{offer}} &= \text{PriceFromSpread}(s_{\text{lean}}^{\text{offer}},\; Y,\; \text{curve}(t),\; \text{vol}(t))
+\end{align}
+
+The full bond pricer handles coupon schedule, maturity, call schedule, day count, accrued interest, convexity --- all of it.
+
+\subsection{Step 7: Assign Confidence}
+
+\begin{equation}
+\text{confidence} = \underbrace{\min\!\left(1,\; \frac{\sum w_k}{w_{\text{suff}}}\right)}_{\text{data sufficiency}} \times \underbrace{(1 - P(\text{stress}) \cdot \delta)}_{\text{regime penalty}} \times \underbrace{\max\!\left(0,\; 1 - \frac{\sigma_{\text{lean}}}{\sigma_{\text{max}}}\right)}_{\text{source agreement}}
+\end{equation}
+
+Downstream behavior:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Confidence} & \textbf{Action} \\
+\midrule
+$> 0.7$ & Quote normally off the lean \\
+$0.4$--$0.7$ & Widen spreads proportionally \\
+$0.2$--$0.4$ & Quote very wide, or only favorable-direction RFQs \\
+$< 0.2$ & Decline the RFQ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Step 8: Output}
+
+The lean for bond $Y$ at time $t$:
+
+\begin{verbatim}
+  LeanOutput:
+      cusip, timestamp, lean_space
+      spread: mid, bid, offer              (bps)
+      price:  mid, bid, offer              (clean $)
+      confidence                            (0 to 1)
+      sigma_lean                            (source disagreement, bps)
+      dominant_source                       (highest-weight source)
+      n_sources, total_weight
+      cross_instr_fraction                  (% weight from cross-instr)
+      regime                                (calm / stressed)
+      liquidity_regime                      (bond's cluster)
+      source_details[]                      (per-source audit trail)
+\end{verbatim}
+
+This output feeds the quoting engine, which adds the inventory lean and alpha signal on top.
+
+
+% ============================================================
+% PART IV: VALIDATION
+% ============================================================
+\newpage
+\part*{Part IV: Validation}
+\addcontentsline{toc}{part}{Part IV: Validation}
+
+
+% ============================================================
+\section{Testing the Lean}\label{sec:testing}
+% ============================================================
+
+A lean is only useful if it predicts where you can actually trade.
+
+\subsection{Test 1: Lean-vs-Fill Accuracy}
+
+For every observed fill (your own RFQs or TRACE prints), compute:
+\begin{equation}
+e_k = s_{\text{fill},k} - s_{\text{lean}}(t_k)
+\end{equation}
+
+All errors are in spread space (eliminates convexity/coupon artifacts). Report:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Bias} $\bar{e}$: should be near zero.
+  \item \textbf{RMSE}: overall accuracy. Target: 1--3bps for liquid IG (calm); 10--25bps for illiquid HY (stress).
+  \item \textbf{Hit rate}: fraction of fills where $|e| < 3$bps. Target: $>$70\% for liquid IG.
+\end{itemize}
+
+Segment by: lean confidence, time since last same-bond observation, liquidity regime, market regime (calm/stressed), trade size, and dominant lean source.
+
+\subsection{Test 2: Hedge Efficacy}
+
+The acid test for cross-instrument leans. You quote $Y$ off a lean derived from instrument $X$, get filled, and hedge by trading $X$. The hedge slippage is:
+\begin{equation}
+\text{slippage} = (s_{\text{fill}} - s_{\text{lean}}) - (s_{\text{hedge}} - s_X) \times \frac{\partial Y}{\partial X}
+\end{equation}
+
+Report: mean slippage (should be positive --- you capture spread), slippage vol, and the Sharpe of the quote-hedge cycle. If Sharpe $< 0$, the lean is costing you money through that source.
+
+\subsection{Test 3: Source Ablation}
+
+Drop each source one at a time and measure accuracy degradation. This tells you where to invest modeling effort.
+
+\subsection{Test 4: Spread Calibration}
+
+Compare the lean half-spread $\hat{h}$ against realized execution costs from TRACE. If the lean spread is systematically too tight, you'll be adversely selected. If too wide, you're quoting uncompetitively.
+
+\subsection{Test 5: Conversion Stability}
+
+Track each cross-instrument conversion residual over time. If the residual is persistent (high AR(1)), the conversion parameters are drifting and need recalibration. If residual vol spikes in stress, the lean should automatically downweight that source (check that it does).
+
+\subsection{Test 6: P\&L Attribution}
+
+Backtest with two configurations: full lean vs.\ naive lean (most recent TRACE mid only). The P\&L difference is the marginal value of the lean infrastructure.
+
+\subsection{Test 7: Tail Accuracy}
+
+Compute errors on the subset of observations where the basis model indicated stress. Report 5th/95th percentiles, not just RMSE. The lean may be well-calibrated on average but dangerously wrong in the tails.
+
+\begin{specbox}[What ``Good'' Looks Like]
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Metric} & \textbf{Liquid IG (calm)} & \textbf{Illiquid HY (stress)} \\
+\midrule
+Bias & $<$ 0.5 bps & $<$ 5 bps \\
+RMSE & 1--3 bps & 10--25 bps \\
+95th pctile error & $<$ 5 bps & $<$ 40 bps \\
+Hit rate ($<$3bps) & $>$70\% & $>$30\% \\
+Hedge cycle Sharpe & $>$2.0 & $>$0.5 \\
+\bottomrule
+\end{tabular}
+\end{specbox}
+
+
+\vfill
+\begin{center}
+{\small\color{steel}\textsc{End of Specification}}
+\end{center}
+
+\end{document}
